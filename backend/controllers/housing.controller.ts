@@ -1,8 +1,6 @@
 import { Response } from 'express';
-import HousingListing from '../models/HousingListing';
-import Reservation from '../models/Reservation';
-import User from '../models/User';
 import { AuthRequest } from '../middleware/auth';
+import housingService from '../services/housing.service';
 
 // @desc    Create a new housing listing (Provider only)
 // @route   POST /api/housing
@@ -31,30 +29,22 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
             return;
         }
 
-        // Check if user is a provider
-        const user = await User.findById(req.user?.userId);
-        if (user?.role !== 'provider') {
-            res.status(403).json({
-                success: false,
-                message: 'Only providers can create housing listings'
-            });
-            return;
-        }
-
-        const listing = await HousingListing.create({
-            title,
-            description,
-            price,
-            location,
-            address,
-            rooms,
-            bathrooms,
-            amenities,
-            contactNumber,
-            availableFrom,
-            createdBy: req.user?.userId,
-            status: 'pending_approval'
-        });
+        const listing = await housingService.createListing(
+            {
+                title,
+                description,
+                price,
+                location,
+                address,
+                rooms,
+                bathrooms,
+                amenities,
+                contactNumber,
+                availableFrom,
+                createdBy: req.user?.userId!
+            },
+            req.user?.userId!
+        );
 
         res.status(201).json({
             success: true,
@@ -62,10 +52,14 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
             data: listing
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Only providers can create housing listings') statusCode = 403;
+        if (errorMessage === 'Your provider account must be approved before creating listings') statusCode = 403;
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage
         });
     }
 };
@@ -77,30 +71,12 @@ export const getAllListings = async (req: AuthRequest, res: Response): Promise<v
     try {
         const { status, location } = req.query;
 
-        let filter: any = {};
-
-        // Students only see active listings
-        if (req.user && req.user.role === 'student') {
-            filter.status = 'active';
-        }
-
-        // Providers see their own listings
-        if (req.user && req.user.role === 'provider') {
-            filter.createdBy = req.user.userId;
-        }
-
-        // Admin sees all listings
-        if (req.user && req.user.role === 'admin' && status) {
-            filter.status = status;
-        }
-
-        if (location) {
-            filter.location = { $regex: location, $options: 'i' };
-        }
-
-        const listings = await HousingListing.find(filter)
-            .populate('createdBy', 'name universityEmail')
-            .sort({ createdAt: -1 });
+        const listings = await housingService.getAllListings({
+            status: status as string,
+            location: location as string,
+            userId: req.user?.userId,
+            userRole: req.user?.role
+        });
 
         res.status(200).json({
             success: true,
@@ -110,37 +86,39 @@ export const getAllListings = async (req: AuthRequest, res: Response): Promise<v
     } catch (error) {
         res.status(500).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: (error as Error).message
         });
     }
 };
 
 // @desc    Get single listing by ID
 // @route   GET /api/housing/:id
-// @access  Public
+// @access  Public (but only active listings visible to non-owners)
 export const getListingById = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const listing = await HousingListing.findById(req.params.id)
-            .populate('createdBy', 'name universityEmail contactNumber');
-
-        if (!listing) {
-            res.status(404).json({
-                success: false,
-                message: 'Listing not found'
-            });
-            return;
-        }
+        const listing = await housingService.getListingById(
+            req.params.id,
+            req.user?.role,
+            req.user?.userId
+        );
 
         res.status(200).json({
             success: true,
             data: listing
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Listing not found' || 
+            errorMessage === 'Listing not found or not accessible') {
+            statusCode = 404;
+        }
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage === 'Listing not found or not accessible' 
+                ? 'Listing not found' 
+                : errorMessage
         });
     }
 };
@@ -150,34 +128,10 @@ export const getListingById = async (req: AuthRequest, res: Response): Promise<v
 // @access  Private (Provider)
 export const updateListing = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const listing = await HousingListing.findById(req.params.id);
-
-        if (!listing) {
-            res.status(404).json({
-                success: false,
-                message: 'Listing not found'
-            });
-            return;
-        }
-
-        // Check ownership
-        if (listing.createdBy.toString() !== req.user?.userId) {
-            res.status(403).json({
-                success: false,
-                message: 'Not authorized to update this listing'
-            });
-            return;
-        }
-
-        // If listing was approved, set back to pending_approval after edit
-        if (listing.status === 'active') {
-            req.body.status = 'pending_approval';
-        }
-
-        const updatedListing = await HousingListing.findByIdAndUpdate(
+        const updatedListing = await housingService.updateListing(
             req.params.id,
-            req.body,
-            { new: true, runValidators: true }
+            req.user?.userId!,
+            req.body
         );
 
         res.status(200).json({
@@ -186,10 +140,14 @@ export const updateListing = async (req: AuthRequest, res: Response): Promise<vo
             data: updatedListing
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Listing not found') statusCode = 404;
+        if (errorMessage === 'Not authorized to update this listing') statusCode = 403;
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage
         });
     }
 };
@@ -199,36 +157,21 @@ export const updateListing = async (req: AuthRequest, res: Response): Promise<vo
 // @access  Private (Provider)
 export const deleteListing = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const listing = await HousingListing.findById(req.params.id);
-
-        if (!listing) {
-            res.status(404).json({
-                success: false,
-                message: 'Listing not found'
-            });
-            return;
-        }
-
-        // Check ownership
-        if (listing.createdBy.toString() !== req.user?.userId) {
-            res.status(403).json({
-                success: false,
-                message: 'Not authorized to delete this listing'
-            });
-            return;
-        }
-
-        await listing.deleteOne();
+        await housingService.deleteListing(req.params.id, req.user?.userId!);
 
         res.status(200).json({
             success: true,
             message: 'Listing deleted successfully'
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Listing not found') statusCode = 404;
+        if (errorMessage === 'Not authorized to delete this listing') statusCode = 403;
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage
         });
     }
 };
@@ -238,28 +181,10 @@ export const deleteListing = async (req: AuthRequest, res: Response): Promise<vo
 // @access  Private (Admin)
 export const approveListing = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const listing = await HousingListing.findById(req.params.id);
-
-        if (!listing) {
-            res.status(404).json({
-                success: false,
-                message: 'Listing not found'
-            });
-            return;
-        }
-
-        if (listing.status !== 'pending_approval') {
-            res.status(400).json({
-                success: false,
-                message: 'Only pending listings can be approved'
-            });
-            return;
-        }
-
-        listing.status = 'active';
-        listing.approvedBy = req.user?.userId as any;
-        listing.approvedAt = new Date();
-        await listing.save();
+        const listing = await housingService.approveListing(
+            req.params.id,
+            req.user?.userId!
+        );
 
         res.status(200).json({
             success: true,
@@ -267,10 +192,14 @@ export const approveListing = async (req: AuthRequest, res: Response): Promise<v
             data: listing
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Listing not found') statusCode = 404;
+        if (errorMessage === 'Only pending listings can be approved') statusCode = 400;
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage
         });
     }
 };
@@ -282,19 +211,10 @@ export const rejectListing = async (req: AuthRequest, res: Response): Promise<vo
     try {
         const { rejectionReason } = req.body;
 
-        const listing = await HousingListing.findById(req.params.id);
-
-        if (!listing) {
-            res.status(404).json({
-                success: false,
-                message: 'Listing not found'
-            });
-            return;
-        }
-
-        listing.status = 'rejected';
-        listing.rejectionReason = rejectionReason;
-        await listing.save();
+        const listing = await housingService.rejectListing(
+            req.params.id,
+            rejectionReason
+        );
 
         res.status(200).json({
             success: true,
@@ -302,10 +222,12 @@ export const rejectListing = async (req: AuthRequest, res: Response): Promise<vo
             data: listing
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        const statusCode = errorMessage === 'Listing not found' ? 404 : 500;
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage
         });
     }
 };
@@ -318,51 +240,12 @@ export const createReservation = async (req: AuthRequest, res: Response): Promis
         const { message, moveInDate } = req.body;
         const listingId = req.params.id;
 
-        // Check if listing exists and is active
-        const listing = await HousingListing.findById(listingId);
-
-        if (!listing) {
-            res.status(404).json({
-                success: false,
-                message: 'Listing not found'
-            });
-            return;
-        }
-
-        if (listing.status !== 'active') {
-            res.status(400).json({
-                success: false,
-                message: 'Cannot reserve inactive listing'
-            });
-            return;
-        }
-
-        // Check if student already has a pending reservation for this listing
-        const existingReservation = await Reservation.findOne({
+        const populatedReservation = await housingService.createReservation({
             listingId,
-            studentId: req.user?.userId,
-            status: 'pending'
-        });
-
-        if (existingReservation) {
-            res.status(400).json({
-                success: false,
-                message: 'You already have a pending reservation for this listing'
-            });
-            return;
-        }
-
-        const reservation = await Reservation.create({
-            listingId,
-            studentId: req.user?.userId,
+            studentId: req.user?.userId!,
             message,
-            moveInDate,
-            status: 'pending'
+            moveInDate
         });
-
-        const populatedReservation = await Reservation.findById(reservation._id)
-            .populate('listingId', 'title location price')
-            .populate('studentId', 'name universityEmail');
 
         res.status(201).json({
             success: true,
@@ -370,10 +253,17 @@ export const createReservation = async (req: AuthRequest, res: Response): Promis
             data: populatedReservation
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Listing not found') statusCode = 404;
+        if (errorMessage === 'Cannot reserve inactive listing' || 
+            errorMessage === 'You already have a pending reservation for this listing') {
+            statusCode = 400;
+        }
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage
         });
     }
 };
@@ -383,28 +273,10 @@ export const createReservation = async (req: AuthRequest, res: Response): Promis
 // @access  Private (Provider)
 export const getListingReservations = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const listing = await HousingListing.findById(req.params.id);
-
-        if (!listing) {
-            res.status(404).json({
-                success: false,
-                message: 'Listing not found'
-            });
-            return;
-        }
-
-        // Check if user owns the listing
-        if (listing.createdBy.toString() !== req.user?.userId) {
-            res.status(403).json({
-                success: false,
-                message: 'Not authorized'
-            });
-            return;
-        }
-
-        const reservations = await Reservation.find({ listingId: req.params.id })
-            .populate('studentId', 'name universityEmail')
-            .sort({ createdAt: -1 });
+        const reservations = await housingService.getListingReservations(
+            req.params.id,
+            req.user?.userId!
+        );
 
         res.status(200).json({
             success: true,
@@ -412,10 +284,14 @@ export const getListingReservations = async (req: AuthRequest, res: Response): P
             data: reservations
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Listing not found') statusCode = 404;
+        if (errorMessage === 'Not authorized') statusCode = 403;
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage
         });
     }
 };
@@ -436,38 +312,12 @@ export const respondToReservation = async (req: AuthRequest, res: Response): Pro
             return;
         }
 
-        const reservation = await Reservation.findById(id)
-            .populate('listingId');
-
-        if (!reservation) {
-            res.status(404).json({
-                success: false,
-                message: 'Reservation not found'
-            });
-            return;
-        }
-
-        // Check if user owns the listing
-        if ((reservation.listingId as any).createdBy.toString() !== req.user?.userId) {
-            res.status(403).json({
-                success: false,
-                message: 'Not authorized'
-            });
-            return;
-        }
-
-        if (reservation.status !== 'pending') {
-            res.status(400).json({
-                success: false,
-                message: 'Reservation has already been processed'
-            });
-            return;
-        }
-
-        reservation.status = action === 'accept' ? 'accepted' : 'rejected';
-        reservation.responseMessage = responseMessage;
-        reservation.respondedAt = new Date();
-        await reservation.save();
+        const reservation = await housingService.respondToReservation(
+            id,
+            req.user?.userId!,
+            action as 'accept' | 'reject',
+            responseMessage
+        );
 
         res.status(200).json({
             success: true,
@@ -475,10 +325,15 @@ export const respondToReservation = async (req: AuthRequest, res: Response): Pro
             data: reservation
         });
     } catch (error) {
-        res.status(500).json({
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Reservation not found') statusCode = 404;
+        if (errorMessage === 'Not authorized') statusCode = 403;
+        if (errorMessage === 'Reservation has already been processed') statusCode = 400;
+        
+        res.status(statusCode).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: errorMessage
         });
     }
 };
@@ -488,9 +343,7 @@ export const respondToReservation = async (req: AuthRequest, res: Response): Pro
 // @access  Private (Student)
 export const getMyReservations = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const reservations = await Reservation.find({ studentId: req.user?.userId })
-            .populate('listingId', 'title location price images')
-            .sort({ createdAt: -1 });
+        const reservations = await housingService.getMyReservations(req.user?.userId!);
 
         res.status(200).json({
             success: true,
@@ -500,8 +353,130 @@ export const getMyReservations = async (req: AuthRequest, res: Response): Promis
     } catch (error) {
         res.status(500).json({
             success: false,
-            message: 'Server error',
-            error: (error as Error).message
+            message: (error as Error).message
         });
     }
 };
+
+// @desc    Cancel a reservation
+// @route   PUT /api/housing/reservations/:id/cancel
+// @access  Private (Student)
+export const cancelReservation = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const reservation = await housingService.cancelReservation(
+            req.params.id,
+            req.user?.userId!
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Reservation cancelled successfully',
+            data: reservation
+        });
+    } catch (error) {
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Reservation not found') statusCode = 404;
+        if (errorMessage === 'Not authorized to cancel this reservation' || 
+            errorMessage === 'Only pending reservations can be cancelled') statusCode = 400;
+        
+        res.status(statusCode).json({
+            success: false,
+            message: errorMessage
+        });
+    }
+};
+
+// @desc    Toggle listing status (active/inactive)
+// @route   PUT /api/housing/:id/toggle-status
+// @access  Private (Provider)
+export const toggleListingStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const listing = await housingService.toggleListingStatus(
+            req.params.id,
+            req.user?.userId!
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `Listing ${listing.status} successfully`,
+            data: listing
+        });
+    } catch (error) {
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Listing not found') statusCode = 404;
+        if (errorMessage === 'Not authorized to modify this listing') statusCode = 403;
+        if (errorMessage === 'Cannot change status of pending listings' || 
+            errorMessage === 'Cannot reactivate rejected listings') statusCode = 400;
+        
+        res.status(statusCode).json({
+            success: false,
+            message: errorMessage
+        });
+    }
+};
+
+// @desc    Get provider dashboard statistics
+// @route   GET /api/housing/provider/dashboard
+// @access  Private (Provider)
+export const getProviderDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const dashboard = await housingService.getProviderDashboard(req.user?.userId!);
+
+        res.status(200).json({
+            success: true,
+            data: dashboard
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: (error as Error).message
+        });
+    }
+};
+
+// @desc    Get admin dashboard statistics
+// @route   GET /api/housing/admin/dashboard
+// @access  Private (Admin)
+export const getAdminDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const dashboard = await housingService.getAdminDashboard();
+
+        res.status(200).json({
+            success: true,
+            data: dashboard
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: (error as Error).message
+        });
+    }
+};
+
+// @desc    Get all provider reservations
+// @route   GET /api/housing/provider/reservations
+// @access  Private (Provider)
+export const getAllProviderReservations = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { status } = req.query;
+        
+        const reservations = await housingService.getAllProviderReservations(
+            req.user?.userId!,
+            status as string
+        );
+
+        res.status(200).json({
+            success: true,
+            count: reservations.length,
+            data: reservations
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: (error as Error).message
+        });
+    }
+};
+
