@@ -10,7 +10,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         console.log('📥 Request body:', req.body);
         console.log('📥 Content-Type:', req.headers['content-type']);
         
-        const { name, universityEmail, password, role } = req.body;
+        const { name, universityEmail, password, role, providerType } = req.body;
 
         // Validation
         if (!name || !universityEmail || !password) {
@@ -26,7 +26,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             name,
             universityEmail,
             password,
-            role
+            role,
+            providerType
         });
 
         res.status(201).json({

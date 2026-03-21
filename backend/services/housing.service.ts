@@ -6,13 +6,17 @@ export interface CreateListingDto {
     title: string;
     description: string;
     price: number;
-    location: string;
-    address?: string;
-    rooms?: number;
-    bathrooms?: number;
+    location: {
+        address: string;
+        city: string;
+        district?: string;
+        distance: number;
+    };
+    propertyType: 'boarding' | 'room' | 'annex' | 'apartment';
+    roomType: 'single' | 'shared' | 'full-house';
     amenities?: string[];
-    contactNumber: string;
-    availableFrom?: Date;
+    contactPhone: string;
+    rulesAndRegulations?: string;
     createdBy: string;
 }
 
@@ -20,14 +24,19 @@ export interface UpdateListingDto {
     title?: string;
     description?: string;
     price?: number;
-    location?: string;
-    address?: string;
-    rooms?: number;
-    bathrooms?: number;
+    location?: {
+        address?: string;
+        city?: string;
+        district?: string;
+        distance?: number;
+    };
+    propertyType?: 'boarding' | 'room' | 'annex' | 'apartment';
+    roomType?: 'single' | 'shared' | 'full-house';
     amenities?: string[];
-    contactNumber?: string;
-    availableFrom?: Date;
+    contactPhone?: string;
+    rulesAndRegulations?: string;
     status?: string;
+    availability?: boolean;
 }
 
 export interface CreateReservationDto {
@@ -91,15 +100,16 @@ export class HousingService {
             // Students and Public users ONLY see admin-verified (active) listings
             // This ensures unverified boardings are hidden
             query.status = 'active';
+            query.availability = true;
         }
 
         // Location filter (applies to all roles)
         if (location) {
-            query.location = { $regex: location, $options: 'i' };
+            query['location.city'] = { $regex: location, $options: 'i' };
         }
 
         const listings = await HousingListing.find(query)
-            .populate('createdBy', 'name universityEmail')
+            .populate('createdBy', 'name universityEmail contactPhone')
             .sort({ createdAt: -1 });
 
         return listings;
@@ -111,7 +121,7 @@ export class HousingService {
      */
     async getListingById(listingId: string, userRole?: string, userId?: string) {
         const listing = await HousingListing.findById(listingId)
-            .populate('createdBy', 'name universityEmail contactNumber');
+            .populate('createdBy', 'name universityEmail contactPhone');
 
         if (!listing) {
             throw new Error('Listing not found');

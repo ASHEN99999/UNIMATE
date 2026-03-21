@@ -7,6 +7,7 @@ export interface RegisterUserDto {
     universityEmail: string;
     password: string;
     role?: string;
+    providerType?: string;
 }
 
 export interface LoginUserDto {
@@ -19,12 +20,17 @@ export class AuthService {
      * Register a new user
      */
     async registerUser(userData: RegisterUserDto) {
-        const { name, universityEmail, password, role } = userData;
+        const { name, universityEmail, password, role, providerType } = userData;
 
         // Check if user already exists
         const existingUser = await User.findOne({ universityEmail });
         if (existingUser) {
             throw new Error('User with this email already exists');
+        }
+
+       // Validate provider type if role is provider
+        if (role === 'provider' && !providerType) {
+            throw new Error('Provider type is required for provider accounts');
         }
 
         // Hash password
@@ -37,6 +43,7 @@ export class AuthService {
             universityEmail,
             passwordHash,
             role: role || 'student',
+            providerType: role === 'provider' ? providerType : undefined,
             isApproved: role === 'provider' ? false : true
         });
 
@@ -44,7 +51,8 @@ export class AuthService {
             id: user._id,
             name: user.name,
             universityEmail: user.universityEmail,
-            role: user.role
+            role: user.role,
+            providerType: user.providerType
         };
     }
 
@@ -85,7 +93,11 @@ export class AuthService {
                 name: user.name,
                 universityEmail: user.universityEmail,
                 role: user.role,
-                isApproved: user.isApproved
+                providerType: user.providerType,
+                isApproved: user.isApproved,
+                isActive: user.isActive,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt
             }
         };
     }
@@ -98,7 +110,18 @@ export class AuthService {
         if (!user) {
             throw new Error('User not found');
         }
-        return user;
+        return {
+            id: user._id,
+            name: user.name,
+            universityEmail: user.universityEmail,
+            role: user.role,
+            providerType: user.providerType,
+            contactNumber: user.contactNumber,
+            isActive: user.isActive,
+            isApproved: user.isApproved,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt
+        };
     }
 
     /**
@@ -111,7 +134,18 @@ export class AuthService {
             isActive: true
         }).select('-passwordHash').sort({ createdAt: -1 });
         
-        return providers;
+        return providers.map(provider => ({
+            id: provider._id,
+            name: provider.name,
+            universityEmail: provider.universityEmail,
+            role: provider.role,
+            providerType: provider.providerType,
+            contactNumber: provider.contactNumber,
+            isActive: provider.isActive,
+            isApproved: provider.isApproved,
+            createdAt: provider.createdAt,
+            updatedAt: provider.updatedAt
+        }));
     }
 
     /**
@@ -138,7 +172,15 @@ export class AuthService {
         provider.rejectionReason = undefined;
         await provider.save();
 
-        return provider;
+        return {
+            id: provider._id,
+            name: provider.name,
+            universityEmail: provider.universityEmail,
+            role: provider.role,
+            providerType: provider.providerType,
+            isApproved: provider.isApproved,
+            isActive: provider.isActive
+        };
     }
 
     /**
@@ -159,7 +201,15 @@ export class AuthService {
         provider.rejectionReason = reason;
         await provider.save();
 
-        return provider;
+        return {
+            id: provider._id,
+            name: provider.name,
+            universityEmail: provider.universityEmail,
+            role: provider.role,
+            providerType: provider.providerType,
+            isApproved: provider.isApproved,
+            isActive: provider.isActive
+        };
     }
 
     /**

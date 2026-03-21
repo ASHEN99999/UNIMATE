@@ -1,12 +1,14 @@
 import { Schema, model, Document } from 'mongoose';
 
 export type UserRole = 'student' | 'provider' | 'admin';
+export type ProviderType = 'housing' | 'laundry';
 
 export interface IUser extends Document {
     name: string;
     universityEmail: string;
     passwordHash: string;
     role: UserRole;
+    providerType?: ProviderType;
     isActive: boolean;
     isApproved: boolean;
     contactNumber?: string;
@@ -37,6 +39,13 @@ const userSchema = new Schema<IUser>({
         type: String,
         enum: ['student', 'provider', 'admin'],
         default: 'student'
+    },
+    providerType: {
+        type: String,
+        enum: ['housing', 'laundry'],
+        required: function(this: IUser) {
+            return this.role === 'provider';
+        }
     },
     isActive: {
         type: Boolean,
