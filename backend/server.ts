@@ -4,6 +4,9 @@ import cors from 'cors';
 import connectDB from './config/db';
 import authRoutes from './routes/auth.routes';
 import housingRoutes from './routes/housing.routes';
+import laundryRoutes from './routes/laundry.routes';
+import foodAssistanceRoutes from './routes/food-assistance.routes';
+import secondhandRoutes from './routes/secondhand.routes';
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +37,9 @@ app.get('/api/health', (req: Request, res: Response) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/housing', housingRoutes);
+app.use('/api/laundry', laundryRoutes);
+app.use('/api/food-assistance', foodAssistanceRoutes);
+app.use('/api/secondhand', secondhandRoutes);
 
 const PORT = process.env.PORT || 5000;
 

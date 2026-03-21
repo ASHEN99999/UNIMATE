@@ -9,6 +9,10 @@ export interface IUser extends Document {
     role: UserRole;
     isActive: boolean;
     isApproved: boolean;
+    contactNumber?: string;
+    approvedBy?: Schema.Types.ObjectId;
+    approvedAt?: Date;
+    rejectionReason?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -41,6 +45,19 @@ const userSchema = new Schema<IUser>({
     isApproved: {
         type: Boolean,
         default: false
+    },
+    contactNumber: {
+        type: String
+    },
+    approvedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    approvedAt: {
+        type: Date
+    },
+    rejectionReason: {
+        type: String
     }
 }, {
     timestamps: true
