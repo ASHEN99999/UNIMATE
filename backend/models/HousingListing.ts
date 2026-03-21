@@ -1,19 +1,28 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
 export type ListingStatus = 'pending_approval' | 'active' | 'inactive' | 'rejected';
+export type PropertyType = 'boarding' | 'room' | 'annex' | 'apartment';
+export type RoomType = 'single' | 'shared' | 'full-house';
+
+export interface ILocation {
+    address: string;
+    city: string;
+    district?: string;
+    distance: number;
+}
 
 export interface IHousingListing extends Document {
     title: string;
     description: string;
     price: number;
-    location: string;
-    address?: string;
-    rooms?: number;
-    bathrooms?: number;
+    location: ILocation;
+    propertyType: PropertyType;
+    roomType: RoomType;
     amenities?: string[];
     images?: string[];
-    contactNumber: string;
-    availableFrom?: Date;
+    contactPhone: string;
+    rulesAndRegulations?: string;
+    availability: boolean;
     createdBy: Types.ObjectId;
     status: ListingStatus;
     rejectionReason?: string;
@@ -41,21 +50,20 @@ const housingListingSchema = new Schema<IHousingListing>({
         min: [0, 'Price cannot be negative']
     },
     location: {
+        address: { type: String, required: true },
+        city: { type: String, required: true },
+        district: { type: String },
+        distance: { type: Number, default: 0 }
+    },
+    propertyType: {
         type: String,
-        required: [true, 'Location is required'],
-        trim: true
+        enum: ['boarding', 'room', 'annex', 'apartment'],
+        required: [true, 'Property type is required']
     },
-    address: {
+    roomType: {
         type: String,
-        trim: true
-    },
-    rooms: {
-        type: Number,
-        min: [1, 'Must have at least 1 room']
-    },
-    bathrooms: {
-        type: Number,
-        min: [1, 'Must have at least 1 bathroom']
+        enum: ['single', 'shared', 'full-house'],
+        required: [true, 'Room type is required']
     },
     amenities: [{
         type: String
@@ -63,12 +71,16 @@ const housingListingSchema = new Schema<IHousingListing>({
     images: [{
         type: String
     }],
-    contactNumber: {
+    contactPhone: {
         type: String,
-        required: [true, 'Contact number is required']
+        required: [true, 'Contact phone is required']
     },
-    availableFrom: {
-        type: Date
+    rulesAndRegulations: {
+        type: String
+    },
+    availability: {
+        type: Boolean,
+        default: true
     },
     createdBy: {
         type: Schema.Types.ObjectId,
@@ -96,6 +108,7 @@ const housingListingSchema = new Schema<IHousingListing>({
 
 // Index for faster queries
 housingListingSchema.index({ status: 1, createdBy: 1 });
-housingListingSchema.index({ location: 1 });
+housingListingSchema.index({ 'location.city': 1 });
+housingListingSchema.index({ propertyType: 1, roomType: 1 });
 
 export default model<IHousingListing>('HousingListing', housingListingSchema);

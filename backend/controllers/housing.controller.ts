@@ -12,19 +12,26 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
             description,
             price,
             location,
-            address,
-            rooms,
-            bathrooms,
+            propertyType,
+            roomType,
             amenities,
-            contactNumber,
-            availableFrom
+            contactPhone,
+            rulesAndRegulations
         } = req.body;
 
         // Validate required fields
-        if (!title || !description || !price || !location || !contactNumber) {
+        if (!title || !description || !price || !location || !contactPhone) {
             res.status(400).json({
                 success: false,
                 message: 'Please provide all required fields'
+            });
+            return;
+        }
+
+        if (!propertyType || !roomType) {
+            res.status(400).json({
+                success: false,
+                message: 'Please specify property type and room type'
             });
             return;
         }
@@ -35,12 +42,11 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
                 description,
                 price,
                 location,
-                address,
-                rooms,
-                bathrooms,
+                propertyType,
+                roomType,
                 amenities,
-                contactNumber,
-                availableFrom,
+                contactPhone,
+                rulesAndRegulations,
                 createdBy: req.user?.userId!
             },
             req.user?.userId!
