@@ -24,6 +24,7 @@ import {
 // Quick actions based on role
 const studentActions = [
   { label: "Find Housing", href: "/housing", icon: Home, color: "bg-[oklch(0.55_0.18_195)]" },
+  { label: "My Reservations", href: "/housing?tab=my-reservations", icon: CalendarDays, color: "bg-[oklch(0.55_0.16_280)]" },
   { label: "Book Laundry", href: "/laundry", icon: Shirt, color: "bg-[oklch(0.55_0.16_280)]" },
   { label: "Request Food", href: "/food", icon: Utensils, color: "bg-[oklch(0.60_0.18_40)]" },
   { label: "Browse Items", href: "/marketplace", icon: ShoppingBag, color: "bg-[oklch(0.50_0.15_145)]" },

@@ -69,10 +69,13 @@ export class HousingService {
             throw new Error('Your provider account must be approved before creating listings');
         }
 
+        // Since provider is already approved by admin, set listing as active immediately
         const listing = await HousingListing.create({
             ...listingData,
             createdBy: userId,
-            status: 'pending_approval'
+            status: 'active',  // Auto-approve listings from verified providers
+            approvedBy: user._id,  // Self-approved since provider is trusted
+            approvedAt: new Date()
         });
 
         return listing;
@@ -336,10 +339,17 @@ export class HousingService {
      */
     async getMyReservations(studentId: string) {
         const reservations = await Reservation.find({ studentId })
-            .populate('listingId', 'title location price images')
+            .populate('listingId', 'title location price images contactPhone')
             .sort({ createdAt: -1 });
 
-        return reservations;
+        // Transform to rename listingId to listing
+        return reservations.map((res: any) => {
+            const jsonRes = res.toJSON();
+            return {
+                ...jsonRes,
+                listing: jsonRes.listingId // Rename listingId to listing
+            };
+        });
     }
 
     /**
@@ -500,7 +510,15 @@ export class HousingService {
             .populate('studentId', 'name universityEmail contactNumber')
             .sort({ createdAt: -1 });
 
-        return reservations;
+        // Transform to include student name and rename listingId to listing
+        return reservations.map((res: any) => {
+            const jsonRes = res.toJSON();
+            return {
+                ...jsonRes,
+                listing: jsonRes.listingId, // Rename listingId to listing
+                studentName: res.studentId?.name
+            };
+        });
     }
 }
 

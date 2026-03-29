@@ -54,7 +54,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
 
         res.status(201).json({
             success: true,
-            message: 'Listing created successfully. Waiting for admin approval.',
+            message: 'Listing created successfully and is now live!',
             data: listing
         });
     } catch (error) {

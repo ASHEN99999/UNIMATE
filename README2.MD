@@ -1,5 +1,4 @@
 laundry management system 
-
 Laundry Service Request Flow
 1. Provider Selection
 1.1 Student selects a laundry provider based on:

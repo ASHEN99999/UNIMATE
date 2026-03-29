@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,10 @@ import {
   Phone,
   ArrowRight,
   Package,
+  Plus,
+  Loader2,
 } from "lucide-react"
+import { toast } from "sonner"
 
 const statusColors = {
   requested: "bg-amber-500/10 text-amber-600 border-amber-200",
@@ -40,7 +44,64 @@ const statusLabels = {
 
 export default function LaundryPage() {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState("providers")
+  const searchParams = useSearchParams()
+  const tab = searchParams.get("tab") || (user?.role === "provider" && user?.providerType === "laundry" ? "my-services" : "providers")
+  
+  const [activeTab, setActiveTab] = useState(tab)
+  const [providerOrders, setProviderOrders] = useState([])
+  const [myService, setMyService] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingService, setIsLoadingService] = useState(false)
+
+  const isLaundryProvider = user?.role === "provider" && user?.providerType === "laundry"
+
+  useEffect(() => {
+    setActiveTab(tab)
+    if (isLaundryProvider) {
+      if (tab === "orders") {
+        fetchProviderOrders()
+      } else if (tab === "my-services") {
+        fetchMyService()
+      }
+    }
+  }, [tab, isLaundryProvider])
+
+  const fetchMyService = async () => {
+    try {
+      setIsLoadingService(true)
+      const response = await fetch('http://localhost:5000/api/laundry/providers/my-provider', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+        }
+      })
+      const data = await response.json()
+      if (data.success && data.data) {
+        setMyService(data.data)
+      }
+    } catch (error) {
+      console.error("Failed to load service:", error)
+    } finally {
+      setIsLoadingService(false)
+    }
+  }
+
+  const fetchProviderOrders = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch('http://localhost:5000/api/laundry/bookings', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+        }
+      })
+      const data = await response.json()
+      setProviderOrders(data.data || [])
+    } catch (error) {
+      toast.error("Failed to load orders")
+      console.error(error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   // Get user's bookings from localStorage + mock data
   const getUserBookings = () => {
@@ -56,31 +117,71 @@ export default function LaundryPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Laundry Services</h1>
-        <p className="text-muted-foreground mt-1">
-          Book trusted laundry services near your campus
-        </p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Laundry Services</h1>
+          <p className="text-muted-foreground mt-1">
+            {isLaundryProvider 
+              ? "Manage your laundry service and orders" 
+              : "Book trusted laundry services near your campus"}
+          </p>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="providers">
-            <Shirt className="mr-2 h-4 w-4" />
-            Service Providers
-          </TabsTrigger>
-          <TabsTrigger value="bookings">
-            <Package className="mr-2 h-4 w-4" />
-            My Bookings
-            {userBookings.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {userBookings.length}
-              </Badge>
-            )}
-          </TabsTrigger>
+          {isLaundryProvider ? (
+            <>
+              <TabsTrigger value="my-services">
+                <Shirt className="mr-2 h-4 w-4" />
+                My Services
+              </TabsTrigger>
+              <TabsTrigger value="orders">
+                <Package className="mr-2 h-4 w-4" />
+                Orders
+                {providerOrders.length > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {providerOrders.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </>
+          ) : (
+            <>
+              <TabsTrigger value="providers">
+                <Shirt className="mr-2 h-4 w-4" />
+                Service Providers
+              </TabsTrigger>
+              <TabsTrigger value="bookings">
+                <Package className="mr-2 h-4 w-4" />
+                My Bookings
+                {userBookings.length > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {userBookings.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
-        <TabsContent value="providers" className="mt-6">
+        {/* Provider Tabs */}
+        {isLaundryProvider && (
+          <>
+            <TabsContent value="my-services" className="mt-6">
+              <MyServicesTab service={myService} isLoading={isLoadingService} onRefresh={fetchMyService} />
+            </TabsContent>
+
+            <TabsContent value="orders" className="mt-6">
+              <OrdersTab orders={providerOrders} isLoading={isLoading} onRefresh={fetchProviderOrders} />
+            </TabsContent>
+          </>
+        )}
+
+        {/* Student Tabs */}
+        {!isLaundryProvider && (
+          <>
+            <TabsContent value="providers" className="mt-6">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {mockLaundryProviders.map((provider) => (
               <ProviderCard key={provider.id} provider={provider} />
@@ -110,7 +211,198 @@ export default function LaundryPage() {
             </Card>
           )}
         </TabsContent>
+          </>
+        )}
       </Tabs>
+    </div>
+  )
+}
+
+// My Services Tab - Provider View
+function MyServicesTab({ service, isLoading, onRefresh }: { service: any, isLoading: boolean, onRefresh: () => void }) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!service) {
+    return (
+      <Card className="p-12">
+        <div className="text-center">
+          <Shirt className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h3 className="mt-4 text-lg font-semibold">No Service Yet</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Create your laundry service to start receiving orders from students.
+          </p>
+          <Button asChild className="mt-4">
+            <Link href="/laundry/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Service
+            </Link>
+          </Button>
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Shirt className="h-5 w-5" />
+                {service.businessName}
+              </CardTitle>
+              <CardDescription className="mt-2 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                {service.location}
+              </CardDescription>
+            </div>
+            <Badge variant={service.isActive ? "default" : "secondary"}>
+              {service.isActive ? "Active" : "Inactive"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Contact Info */}
+          <div className="space-y-2">
+            <h4 className="font-semibold flex items-center gap-2">
+              <Phone className="h-4 w-4" />
+              Contact
+            </h4>
+            <p className="text-sm text-muted-foreground">{service.contactNumber}</p>
+          </div>
+
+          {/* Clothes Categories */}
+          {service.clothesCategories && service.clothesCategories.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="font-semibold">Clothes Categories</h4>
+              <div className="grid gap-2">
+                {service.clothesCategories.map((category: any, index: number) => (
+                  <div key={index} className="flex justify-between text-sm border-b pb-2">
+                    <span>{category.name}</span>
+                    <span className="font-medium">Rs. {category.pricePerItem}/item</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Service Types */}
+          {service.serviceTypes && service.serviceTypes.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="font-semibold">Service Types</h4>
+              <div className="grid gap-2">
+                {service.serviceTypes.map((serviceType: any, index: number) => (
+                  <div key={index} className="flex justify-between text-sm border-b pb-2">
+                    <span>{serviceType.name}</span>
+                    <span className="font-medium">Rs. {serviceType.price}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Service Durations */}
+          {service.serviceDurations && service.serviceDurations.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="font-semibold">Service Durations</h4>
+              <div className="grid gap-2">
+                {service.serviceDurations.map((duration: any, index: number) => (
+                  <div key={index} className="flex justify-between text-sm border-b pb-2">
+                    <span>{duration.duration} ({duration.hours}h)</span>
+                    <span className="font-medium">
+                      {duration.price > 0 ? `+Rs. ${duration.price}` : "Standard"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Rating */}
+          <div className="flex items-center gap-2">
+            <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+            <span className="font-semibold">{service.rating?.toFixed(1) || "0.0"}</span>
+            <span className="text-sm text-muted-foreground">
+              ({service.totalReviews || 0} reviews)
+            </span>
+          </div>
+        </CardContent>
+        <CardFooter className="flex gap-2">
+          <Button variant="outline" onClick={onRefresh}>
+            <Loader2 className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button asChild>
+            <Link href={`/laundry/edit/${service.id || service._id}`}>
+              Edit Service
+            </Link>
+          </Button>
+        </CardFooter>
+      </Card>
+    </div>
+  )
+}
+
+// Orders Tab - Provider View
+function OrdersTab({ orders, isLoading, onRefresh }: { orders: any[], isLoading: boolean, onRefresh: () => void }) {
+  return (
+    <div className="space-y-6">
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : orders.length > 0 ? (
+        <div className="space-y-4">
+          {orders.map((order) => (
+            <Card key={order.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle>{order.orderNumber || `Order #${order.id?.substring(0, 8)}`}</CardTitle>
+                    <CardDescription className="mt-1">
+                      Student: {order.studentName}
+                    </CardDescription>
+                  </div>
+                  <Badge className={statusColors[order.status as keyof typeof statusColors]}>
+                    {statusLabels[order.status as keyof typeof statusLabels]}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  <div><strong>Items:</strong> {order.clothesItems?.length || 0} items</div>
+                  <div><strong>Services:</strong> {order.selectedServices?.join(", ") || "N/A"}</div>
+                  <div><strong>Total:</strong> Rs. {order.totalPrice?.toLocaleString() || 0}</div>
+                  <div><strong>Collection Date:</strong> {order.collectionDate ? new Date(order.collectionDate).toLocaleDateString() : "N/A"}</div>
+                </div>
+              </CardContent>
+              <CardFooter className="flex gap-2">
+                <Button variant="outline" size="sm">View Details</Button>
+                {order.status === "requested" && (
+                  <Button size="sm">Confirm Order</Button>
+                )}
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="p-12">
+          <div className="text-center">
+            <Package className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">No orders yet</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              When students book your laundry service, orders will appear here.
+            </p>
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

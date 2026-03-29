@@ -30,7 +30,8 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
-import { mockHousingListings } from "@/lib/mock-data"
+import { housingService } from "@/lib/services/housing.service"
+import type { HousingListing } from "@/lib/types"
 import { useAuth } from "@/context/auth-context"
 import { cn } from "@/lib/utils"
 import {
@@ -66,7 +67,8 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params)
   const router = useRouter()
   const { user, isAuthenticated } = useAuth()
-  const [listing, setListing] = useState(mockHousingListings.find((l) => l.id === id))
+  const [listing, setListing] = useState<HousingListing | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState(0)
   const [reservationOpen, setReservationOpen] = useState(false)
   const [checkInDate, setCheckInDate] = useState<Date>()
@@ -75,9 +77,31 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    const found = mockHousingListings.find((l) => l.id === id)
-    setListing(found)
+    const fetchListing = async () => {
+      try {
+        setIsLoading(true)
+        const data = await housingService.getListingById(id)
+        setListing(data)
+      } catch (error) {
+        console.error("Failed to fetch listing:", error)
+        toast.error("Failed to load listing details")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    if (id) {
+      fetchListing()
+    }
   }, [id])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Spinner />
+      </div>
+    )
+  }
 
   if (!listing) {
     return (
@@ -100,34 +124,39 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
       return
     }
 
-    setIsSubmitting(true)
-    
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // Save to localStorage
-    const reservations = JSON.parse(localStorage.getItem("unimate_reservations") || "[]")
-    const newReservation = {
-      id: `reservation_${Date.now()}`,
-      listingId: listing.id,
-      listingTitle: listing.title,
-      studentId: user?.id,
-      studentName: user?.name,
-      checkInDate: format(checkInDate, "yyyy-MM-dd"),
-      duration: parseInt(duration),
-      totalPrice: listing.price * parseInt(duration),
-      status: "pending",
-      message,
-      createdAt: new Date().toISOString(),
+    if (!isAuthenticated) {
+      toast.error("Please log in to make a reservation")
+      router.push("/login")
+      return
     }
-    reservations.push(newReservation)
-    localStorage.setItem("unimate_reservations", JSON.stringify(reservations))
 
-    setIsSubmitting(false)
-    setReservationOpen(false)
-    toast.success("Reservation request sent!", {
-      description: "The provider will review your request shortly.",
-    })
+    if (user?.role !== "student") {
+      toast.error("Only students can make reservations")
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      
+      await housingService.createReservation(id, {
+        message,
+        moveInDate: format(checkInDate, "yyyy-MM-dd")
+      })
+
+      setReservationOpen(false)
+      toast.success("Reservation request sent!", {
+        description: "The provider will review your request shortly.",
+      })
+      
+      // Reset form
+      setCheckInDate(undefined)
+      setMessage("")
+    } catch (error) {
+      console.error("Reservation error:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to create reservation")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const images = listing.images.length > 0 ? listing.images : ["/placeholder.svg?height=600&width=800"]

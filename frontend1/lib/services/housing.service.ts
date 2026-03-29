@@ -80,11 +80,13 @@ export const housingService = {
   },
 
   async getMyReservations(): Promise<HousingReservation[]> {
-    return apiClient.get<HousingReservation[]>('/housing/my-reservations');
+    const response = await apiClient.get<{ success: boolean; data: HousingReservation[] }>('/housing/my/reservations');
+    return response.data;
   },
 
-  async createReservation(data: CreateReservationRequest): Promise<HousingReservation> {
-    return apiClient.post<HousingReservation>('/housing/reservations', data);
+  async createReservation(listingId: string, data: { message?: string; moveInDate?: string }): Promise<HousingReservation> {
+    const response = await apiClient.post<{ success: boolean; data: HousingReservation }>(`/housing/${listingId}/reserve`, data);
+    return response.data;
   },
 
   async updateReservationStatus(id: string, status: ReservationStatus): Promise<HousingReservation> {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
   SelectContent,
@@ -27,7 +29,7 @@ import {
 import { Slider } from "@/components/ui/slider"
 import { housingService } from "@/lib/services/housing.service"
 import { toast } from "sonner"
-import type { HousingListing, HousingFilters, PropertyType } from "@/lib/types"
+import type { HousingListing, HousingFilters, PropertyType, HousingReservation } from "@/lib/types"
 import {
   Home,
   MapPin,
@@ -41,8 +43,12 @@ import {
   X,
   Plus,
   Loader2,
+  CalendarDays,
+  Check,
+  XCircle,
 } from "lucide-react"
 import { useAuth } from "@/context/auth-context"
+import { format } from "date-fns"
 
 const PROPERTY_TYPES: { value: PropertyType; label: string }[] = [
   { value: "boarding", label: "Boarding" },
@@ -73,7 +79,11 @@ function getAmenityIcon(amenity: string) {
 
 export default function HousingPage() {
   const { user } = useAuth()
+  const searchParams = useSearchParams()
+  const tab = searchParams.get("tab") || "browse"
+  
   const [listings, setListings] = useState<HousingListing[]>([])
+  const [reservations, setReservations] = useState<HousingReservation[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [filters, setFilters] = useState<HousingFilters>({})
@@ -82,8 +92,49 @@ export default function HousingPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   useEffect(() => {
-    fetchListings()
-  }, [])
+    if (tab === "reservations" && user?.role === "provider") {
+      fetchReservations()
+    } else if (tab === "my-reservations" && user?.role === "student") {
+      fetchReservations()
+    } else {
+      fetchListings()
+    }
+  }, [tab, user])
+
+  const fetchReservations = async () => {
+    try {
+      setIsLoading(true)
+      // Fetch provider or student reservations based on role
+      const endpoint = user?.role === "provider" 
+        ? 'http://localhost:5000/api/housing/provider/reservations'
+        : 'http://localhost:5000/api/housing/my/reservations'
+      
+      console.log('Fetching reservations from:', endpoint)
+      console.log('User role:', user?.role)
+      console.log('User ID:', user?.id)
+      
+      const response = await fetch(endpoint, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+        }
+      })
+      
+      const data = await response.json()
+      console.log('Reservations response:', data)
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch reservations')
+      }
+      
+      setReservations(data.data || [])
+    } catch (error) {
+      console.error('Reservation fetch error:', error)
+      toast.error("Failed to load reservations")
+      console.error(error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const fetchListings = async () => {
     try {
@@ -100,9 +151,20 @@ export default function HousingPage() {
 
   const filteredListings = useMemo(() => {
     return listings.filter((listing) => {
-      // Only show active and available listings
-      if (listing.status !== "active" || !listing.availability) {
-        return false
+      // For providers: show all their listings regardless of status
+      // For students/public: only show active and available listings
+      const isProvider = user?.role === "provider"
+      // Backend returns createdBy field (can be ObjectId string or populated object)
+      const listingOwnerId = typeof (listing as any).createdBy === 'string' 
+        ? (listing as any).createdBy 
+        : (listing as any).createdBy?._id || listing.providerId
+      const isOwnListing = isProvider && listingOwnerId === user?.id
+      
+      if (!isOwnListing) {
+        // Non-provider or not their listing - only show active and available
+        if (listing.status !== "active" || !listing.availability) {
+          return false
+        }
       }
 
       // Search query
@@ -140,7 +202,7 @@ export default function HousingPage() {
 
       return true
     })
-  }, [listings, searchQuery, filters, priceRange, selectedAmenities])
+  }, [listings, searchQuery, filters, priceRange, selectedAmenities, user])
 
   const clearFilters = () => {
     setFilters({})
@@ -151,6 +213,17 @@ export default function HousingPage() {
   const hasActiveFilters =
     filters.city || filters.propertyType || priceRange[0] > 0 || priceRange[1] < 50000 || selectedAmenities.length > 0
 
+  // Render reservations tab for providers
+  if (tab === "reservations" && user?.role === "provider") {
+    return <ReservationsTab reservations={reservations} isLoading={isLoading} onRefresh={fetchReservations} />
+  }
+
+  // Render my-reservations tab for students
+  if (tab === "my-reservations" && user?.role === "student") {
+    return <MyReservationsTab reservations={reservations} isLoading={isLoading} onRefresh={fetchReservations} />
+  }
+
+  // Default: Render listings view
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -320,7 +393,7 @@ export default function HousingPage() {
       ) : filteredListings.length > 0 ? (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {filteredListings.map((listing) => (
-            <HousingCard key={listing.id} listing={listing} />
+            <HousingCard key={listing.id || (listing as any)._id} listing={listing} />
           ))}
         </div>
       ) : (
@@ -342,8 +415,31 @@ export default function HousingPage() {
 }
 
 function HousingCard({ listing }: { listing: HousingListing }) {
+  const { user } = useAuth()
+  // Backend returns createdBy field (can be ObjectId string or populated object)
+  const listingOwnerId = typeof (listing as any).createdBy === 'string' 
+    ? (listing as any).createdBy 
+    : (listing as any).createdBy?._id || listing.providerId
+  const isOwnListing = user?.role === "provider" && listingOwnerId === user?.id
+  
+  // Handle both id and _id from backend
+  const listingId = listing.id || (listing as any)._id
+  
+  const getStatusVariant = (status: ListingStatus): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status) {
+      case "active":
+        return "default"
+      case "pending_approval":
+        return "secondary"
+      case "rejected":
+        return "destructive"
+      default:
+        return "outline"
+    }
+  }
+  
   return (
-    <Link href={`/housing/${listing.id}`}>
+    <Link href={`/housing/${listingId}`}>
       <Card className="overflow-hidden transition-all hover:shadow-lg hover:border-primary/50 group cursor-pointer h-full flex flex-col">
         <div className="relative aspect-video overflow-hidden bg-muted">
           <Image
@@ -356,6 +452,14 @@ function HousingCard({ listing }: { listing: HousingListing }) {
           <Badge variant="secondary" className="absolute top-3 right-3 capitalize">
             {listing.roomType}
           </Badge>
+          {isOwnListing && listing.status !== "active" && (
+            <Badge 
+              variant={getStatusVariant(listing.status)} 
+              className="absolute bottom-3 left-3 capitalize"
+            >
+              {listing.status.replace("_", " ")}
+            </Badge>
+          )}
         </div>
         <CardHeader className="pb-2">
           <CardTitle className="line-clamp-1 text-lg">{listing.title}</CardTitle>
@@ -369,8 +473,8 @@ function HousingCard({ listing }: { listing: HousingListing }) {
         <CardContent className="flex-1 pb-2">
           <p className="text-sm text-muted-foreground line-clamp-2">{listing.description}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {listing.amenities.slice(0, 4).map((amenity) => (
-              <Badge key={amenity} variant="outline" className="text-xs flex items-center gap-1">
+            {listing.amenities.slice(0, 4).map((amenity, index) => (
+              <Badge key={`${amenity}-${index}`} variant="outline" className="text-xs flex items-center gap-1">
                 {getAmenityIcon(amenity)}
                 {amenity}
               </Badge>
@@ -393,5 +497,295 @@ function HousingCard({ listing }: { listing: HousingListing }) {
         </CardFooter>
       </Card>
     </Link>
+  )
+}
+
+// Reservations Tab Component for Providers
+function ReservationsTab({ reservations, isLoading, onRefresh }: { 
+  reservations: HousingReservation[], 
+  isLoading: boolean,
+  onRefresh: () => void 
+}) {
+  const [processingId, setProcessingId] = useState<string | null>(null)
+
+  const handleResponse = async (reservationId: string, action: 'accept' | 'reject') => {
+    try {
+      setProcessingId(reservationId)
+      const response = await fetch(`http://localhost:5000/api/housing/reservations/${reservationId}/${action}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+        },
+        body: JSON.stringify({
+          responseMessage: action === 'reject' ? 'Not available at this time' : 'Approved!'
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success(`Reservation ${action}ed successfully`)
+        onRefresh()
+      } else {
+        toast.error(data.message || `Failed to ${action} reservation`)
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing reservation:`, error)
+      toast.error(`Failed to ${action} reservation`)
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Reservations</h1>
+        <p className="text-muted-foreground mt-1">
+          Manage student reservation requests for your listings
+        </p>
+      </div>
+
+      {/* Reservations List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : reservations.length > 0 ? (
+        <div className="grid gap-4">
+          {reservations.map((reservation) => (
+            <Card key={reservation.id}>
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-semibold text-lg">
+                        {(reservation.listing as any)?.title || `Listing ${(reservation as any).listingId?.id || (reservation as any).listingId || ''}`}
+                      </h3>
+                      <Badge
+                        variant={
+                          reservation.status === "accepted"
+                            ? "default"
+                            : reservation.status === "rejected"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                      >
+                        {reservation.status}
+                      </Badge>
+                    </div>
+
+                    <div className="grid gap-2 text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <CalendarDays className="h-4 w-4" />
+                        <span>Move-in: {(reservation as any).moveInDate ? format(new Date((reservation as any).moveInDate), "PPP") : "Not specified"}</span>
+                      </div>
+                      <p><strong>Student:</strong> {reservation.studentName || (reservation as any).studentId?.name || "Unknown"}</p>
+                      {reservation.message && (
+                        <p><strong>Message:</strong> {reservation.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {reservation.status === "pending" && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => handleResponse(reservation.id, "accept")}
+                        disabled={processingId === reservation.id}
+                      >
+                        {processingId === reservation.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Check className="h-4 w-4 mr-1" />
+                            Approve
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleResponse(reservation.id, "reject")}
+                        disabled={processingId === reservation.id}
+                      >
+                        <XCircle className="h-4 w-4 mr-1" />
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="p-12">
+          <div className="text-center">
+            <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">No reservations yet</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              When students request to reserve your listings, they'll appear here.
+            </p>
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// My Reservations Tab Component for Students
+function MyReservationsTab({ reservations, isLoading, onRefresh }: { 
+  reservations: HousingReservation[], 
+  isLoading: boolean,
+  onRefresh: () => void 
+}) {
+  const handleCancelReservation = async (reservationId: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/housing/reservations/${reservationId}/cancel`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+        }
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success("Reservation cancelled successfully")
+        onRefresh()
+      } else {
+        toast.error(data.message || "Failed to cancel reservation")
+      }
+    } catch (error) {
+      console.error("Error cancelling reservation:", error)
+      toast.error("Failed to cancel reservation")
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "accepted":
+        return <Badge className="bg-green-500">Accepted</Badge>
+      case "rejected":
+        return <Badge variant="destructive">Rejected</Badge>
+      case "cancelled":
+        return <Badge variant="outline">Cancelled</Badge>
+      default:
+        return <Badge variant="secondary">Pending</Badge>
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">My Reservations</h1>
+        <p className="text-muted-foreground mt-1">
+          View and manage your housing reservation requests
+        </p>
+      </div>
+
+      {/* Reservations List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : reservations.length > 0 ? (
+        <div className="grid gap-4">
+          {reservations.map((reservation) => (
+            <Card key={reservation.id}>
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-semibold text-lg">
+                        {(reservation.listing as any)?.title || `Listing ${(reservation as any).listingId?.id || (reservation as any).listingId || ''}`}
+                      </h3>
+                      {getStatusBadge(reservation.status)}
+                    </div>
+
+                    <div className="grid gap-2 text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <MapPin className="h-4 w-4" />
+                        <span>{(reservation.listing as any)?.location?.city || "Location not available"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <CalendarDays className="h-4 w-4" />
+                        <span>Request sent: {format(new Date(reservation.createdAt), "PPP")}</span>
+                      </div>
+                      {(reservation as any).moveInDate && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <CalendarDays className="h-4 w-4" />
+                          <span>Move-in: {format(new Date((reservation as any).moveInDate), "PPP")}</span>
+                        </div>
+                      )}
+                      {reservation.message && (
+                        <p className="mt-2"><strong>Your message:</strong> {reservation.message}</p>
+                      )}
+                      {(reservation as any).responseMessage && (
+                        <div className="mt-2 p-3 bg-muted rounded-md">
+                          <p className="text-sm"><strong>Provider response:</strong> {(reservation as any).responseMessage}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {reservation.status === "accepted" && (
+                      <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <h4 className="font-semibold text-green-800 mb-2">✓ Reservation Accepted!</h4>
+                        <p className="text-sm text-green-700">
+                          Contact the provider at: {(reservation.listing as any)?.contactPhone || "Contact info not available"}
+                        </p>
+                      </div>
+                    )}
+
+                    {reservation.status === "rejected" && (reservation as any).responseMessage && (
+                      <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <h4 className="font-semibold text-red-800">Reservation Declined</h4>
+                      </div>
+                    )}
+                  </div>
+
+                  {reservation.status === "pending" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleCancelReservation(reservation.id)}
+                    >
+                      Cancel Request
+                    </Button>
+                  )}
+
+                  {(reservation.status === "accepted" || reservation.status === "rejected") && (
+                    <Button asChild size="sm">
+                      <Link href={`/housing/${(reservation.listing as any)?.id || (reservation as any).listingId}`}>
+                        View Listing
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="p-12">
+          <div className="text-center">
+            <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">No reservations yet</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              When you request to reserve a listing, it will appear here.
+            </p>
+            <Button asChild className="mt-4">
+              <Link href="/housing">Browse Listings</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+    </div>
   )
 }
