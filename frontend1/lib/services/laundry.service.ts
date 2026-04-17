@@ -91,6 +91,13 @@ export const laundryService = {
   async cancelBooking(id: string): Promise<LaundryBooking> {
     return apiClient.patch<LaundryBooking>(`/laundry/bookings/${id}/cancel`);
   },
+
+  async getBookingQRCode(bookingId: string): Promise<{ qrCode: string; booking: any }> {
+    const response = await apiClient.get<{ success: boolean; data: { qrCode: string; booking: any } }>(
+      `/laundry/bookings/${bookingId}/qr`
+    );
+    return response.data;
+  },
 };
 
 export default laundryService;

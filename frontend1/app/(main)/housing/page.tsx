@@ -115,7 +115,7 @@ export default function HousingPage() {
       
       const response = await fetch(endpoint, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
         }
       })
       
@@ -515,7 +515,7 @@ function ReservationsTab({ reservations, isLoading, onRefresh }: {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
         },
         body: JSON.stringify({
           responseMessage: action === 'reject' ? 'Not available at this time' : 'Approved!'
@@ -649,7 +649,7 @@ function MyReservationsTab({ reservations, isLoading, onRefresh }: {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
         }
       })
       

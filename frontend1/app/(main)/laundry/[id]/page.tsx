@@ -14,7 +14,6 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
-import { mockLaundryProviders } from "@/lib/mock-data"
 import { generateOrderNumber } from "@/lib/mock-data"
 import { useAuth } from "@/context/auth-context"
 import { cn } from "@/lib/utils"
@@ -30,6 +29,7 @@ import {
   Minus,
   Check,
   ChevronRight,
+  Loader2,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -46,7 +46,8 @@ export default function LaundryProviderPage({ params }: { params: Promise<{ id: 
   const { id } = use(params)
   const router = useRouter()
   const { user } = useAuth()
-  const [provider, setProvider] = useState(mockLaundryProviders.find((p) => p.id === id))
+const [provider, setProvider] = useState<any>(null)
+  const [isLoadingProvider, setIsLoadingProvider] = useState(true)
   
   // Multi-step form state
   const [currentStep, setCurrentStep] = useState<BookingStep>("clothes")
@@ -58,18 +59,33 @@ export default function LaundryProviderPage({ params }: { params: Promise<{ id: 
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    const found = mockLaundryProviders.find((p) => p.id === id)
-    setProvider(found)
-    if (found) {
-      // Initialize clothes selection
-      setClothesSelection(
-        found.clothesCategories.map((cat) => ({
-          category: cat.name,
-          quantity: 0,
-          pricePerPiece: cat.pricePerPiece,
-        }))
-      )
+    const fetchProvider = async () => {
+      try {
+        setIsLoadingProvider(true)
+        const response = await fetch(`http://localhost:5000/api/laundry/providers/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
+          }
+        })
+        const data = await response.json()
+        if (data.success && data.data) {
+          const found = data.data
+          setProvider(found)
+          setClothesSelection(
+            found.clothesCategories.map((cat: any) => ({
+              category: cat.name,
+              quantity: 0,
+              pricePerPiece: cat.pricePerItem,
+            }))
+          )
+        }
+      } catch (error) {
+        console.error("Failed to load provider:", error)
+      } finally {
+        setIsLoadingProvider(false)
+      }
     }
+    fetchProvider()
   }, [id])
 
   // Calculate totals
@@ -87,7 +103,7 @@ export default function LaundryProviderPage({ params }: { params: Promise<{ id: 
       .reduce((acc, s) => acc + s.price, 0)
     
     const durationExtra = provider.serviceDurations.find(
-      (d) => d.name === selectedDuration
+      (d: any) => d.duration === selectedDuration
     )?.price || 0
 
     return {
@@ -142,40 +158,66 @@ export default function LaundryProviderPage({ params }: { params: Promise<{ id: 
     if (!provider || !collectionDate || !user) return
 
     setIsSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      const selectedDurationObj = provider.serviceDurations.find(
+        (d: any) => d.duration === selectedDuration
+      )
 
-    const booking = {
-      id: `booking_${Date.now()}`,
-      orderNumber: generateOrderNumber("LND"),
-      providerId: provider.id,
-      studentId: user.id,
-      studentName: user.name,
-      studentContact: contactPhone,
-      clothesItems: clothesSelection
-        .filter((item) => item.quantity > 0)
-        .map((item) => ({
-          category: item.category,
-          quantity: item.quantity,
-          price: item.quantity * item.pricePerPiece,
-        })),
-      selectedServices,
-      serviceDuration: selectedDuration,
-      totalPrice: totals.total,
-      collectionDate: format(collectionDate, "yyyy-MM-dd"),
-      status: "requested",
-      paymentStatus: "pending",
-      createdAt: new Date().toISOString(),
+      const bookingPayload = {
+        orderNumber: generateOrderNumber("LND"),
+        providerId: provider.id || provider._id,
+        studentName: user.name,
+        studentContact: contactPhone,
+        clothesItems: clothesSelection
+          .filter((item: any) => item.quantity > 0)
+          .map((item: any) => ({
+            category: item.category,
+            quantity: item.quantity,
+            pricePerItem: item.pricePerPiece,
+            subtotal: item.quantity * item.pricePerPiece,
+          })),
+        selectedServices: provider.serviceTypes
+          .filter((s: any) => selectedServices.includes(s.name))
+          .map((s: any) => ({ name: s.name, price: s.price })),
+        serviceDuration: {
+          duration: selectedDurationObj?.duration || selectedDuration,
+          hours: selectedDurationObj?.hours || 24,
+          price: selectedDurationObj?.price || 0,
+        },
+        collectionDate: format(collectionDate, "yyyy-MM-dd"),
+      }
+
+      const response = await fetch('http://localhost:5000/api/laundry/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`,
+        },
+        body: JSON.stringify(bookingPayload),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        toast.success("Booking confirmed!", {
+          description: `Your order ${data.data.orderNumber} has been submitted.`,
+        })
+        router.push("/laundry?tab=bookings")
+      } else {
+        toast.error("Failed to create booking", { description: data.message })
+      }
+    } catch (error) {
+      toast.error("Something went wrong. Please try again.")
+    } finally {
+      setIsSubmitting(false)
     }
+  }
 
-    const bookings = JSON.parse(localStorage.getItem("unimate_laundry_bookings") || "[]")
-    bookings.push(booking)
-    localStorage.setItem("unimate_laundry_bookings", JSON.stringify(bookings))
-
-    setIsSubmitting(false)
-    toast.success("Booking confirmed!", {
-      description: `Your order ${booking.orderNumber} has been submitted.`,
-    })
-    router.push("/laundry?tab=bookings")
+  if (isLoadingProvider) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   if (!provider) {
@@ -218,10 +260,12 @@ export default function LaundryProviderPage({ params }: { params: Promise<{ id: 
                 <MapPin className="h-4 w-4" />
                 {provider.location}
               </span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                {provider.operatingHours.open} - {provider.operatingHours.close}
-              </span>
+              {provider.operatingHours && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  {provider.operatingHours.open} - {provider.operatingHours.close}
+                </span>
+              )}
               <span className="flex items-center gap-1">
                 <Phone className="h-4 w-4" />
                 {provider.contactNumber}
@@ -368,21 +412,21 @@ export default function LaundryProviderPage({ params }: { params: Promise<{ id: 
                 </CardHeader>
                 <CardContent>
                   <RadioGroup value={selectedDuration} onValueChange={setSelectedDuration}>
-                    {provider.serviceDurations.map((duration) => (
+                    {provider.serviceDurations.map((duration: any) => (
                       <div
-                        key={duration.name}
+                        key={duration.duration}
                         className={cn(
                           "flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-colors",
-                          selectedDuration === duration.name
+                          selectedDuration === duration.duration
                             ? "border-primary bg-primary/5"
                             : "hover:bg-muted/50"
                         )}
-                        onClick={() => setSelectedDuration(duration.name)}
+                        onClick={() => setSelectedDuration(duration.duration)}
                       >
                         <div className="flex items-center gap-3">
-                          <RadioGroupItem value={duration.name} id={duration.name} />
-                          <Label htmlFor={duration.name} className="cursor-pointer font-medium">
-                            {duration.name}
+                          <RadioGroupItem value={duration.duration} id={duration.duration} />
+                          <Label htmlFor={duration.duration} className="cursor-pointer font-medium">
+                            {duration.duration} ({duration.hours}h)
                           </Label>
                         </div>
                         <span className="font-semibold">

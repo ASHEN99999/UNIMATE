@@ -53,6 +53,31 @@ export const secondhandService = {
   async markAsSold(id: string): Promise<SecondHandItem> {
     return apiClient.patch<SecondHandItem>(`/secondhand/items/${id}/sold`);
   },
+
+  async createOffer(itemId: string, data: { offerPrice: number; message?: string; buyerName: string; buyerContact: string }): Promise<any> {
+    const response = await apiClient.post<{ success: boolean; data: any }>(`/secondhand/items/${itemId}/offers`, data);
+    return response.data;
+  },
+
+  async getItemOffers(itemId: string): Promise<any[]> {
+    const response = await apiClient.get<{ success: boolean; data: any[] }>(`/secondhand/items/${itemId}/offers`);
+    return response.data;
+  },
+
+  async getMyOffers(): Promise<any[]> {
+    const response = await apiClient.get<{ success: boolean; data: any[] }>('/secondhand/offers/my-offers');
+    return response.data;
+  },
+
+  async respondToOffer(offerId: string, action: 'accept' | 'reject' | 'counter', counterPrice?: number, counterMessage?: string): Promise<any> {
+    const response = await apiClient.put<{ success: boolean; data: any }>(`/secondhand/offers/${offerId}/respond`, { action, counterPrice, counterMessage });
+    return response.data;
+  },
+
+  async withdrawOffer(offerId: string): Promise<any> {
+    const response = await apiClient.put<{ success: boolean; data: any }>(`/secondhand/offers/${offerId}/withdraw`, {});
+    return response.data;
+  },
 };
 
 export default secondhandService;

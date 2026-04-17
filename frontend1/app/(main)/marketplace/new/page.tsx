@@ -54,7 +54,7 @@ export default function SellItemPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!user) {
       toast.error("Please log in to sell items")
       return
@@ -62,6 +62,23 @@ export default function SellItemPage() {
 
     if (!title || !description || !category || !condition || !price || !location || !contactPhone) {
       toast.error("Please fill in all required fields")
+      return
+    }
+    if (title.trim().length < 5) {
+      toast.error("Title must be at least 5 characters")
+      return
+    }
+    if (description.trim().length < 10) {
+      toast.error("Description must be at least 10 characters")
+      return
+    }
+    const priceNum = parseInt(price)
+    if (isNaN(priceNum) || priceNum < 1) {
+      toast.error("Price must be a positive number")
+      return
+    }
+    if (!/^[0-9+\-\s()]{7,15}$/.test(contactPhone.trim())) {
+      toast.error("Phone number must be 7–15 digits — no letters allowed")
       return
     }
 
@@ -189,7 +206,11 @@ export default function SellItemPage() {
                 min="1"
                 placeholder="Enter your asking price"
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (/[^0-9]/.test(v)) return
+                  setPrice(v)
+                }}
                 required
               />
             </div>
@@ -212,11 +233,17 @@ export default function SellItemPage() {
               <Input
                 id="contact"
                 type="tel"
-                placeholder="Your phone number"
+                placeholder="e.g., 0771234567"
                 value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (/[a-zA-Z]/.test(v)) return
+                  setContactPhone(v)
+                }}
+                maxLength={15}
                 required
               />
+              <p className="text-xs text-muted-foreground">Digits only — no letters allowed</p>
             </div>
 
             {/* Image Upload Placeholder */}

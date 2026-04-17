@@ -111,18 +111,28 @@ export default function FoodPage() {
 
   const handleCreateRequest = async () => {
     if (!user) return
-    
+
     const validItems = foodItems.filter((item) => item.item.trim() !== "")
     if (validItems.length === 0) {
       toast.error("Please add at least one food item")
       return
     }
-    if (!locationType || !locationDetails) {
+    for (const item of validItems) {
+      if (item.quantity < 1 || !Number.isInteger(item.quantity)) {
+        toast.error("Each food item quantity must be a whole number of at least 1")
+        return
+      }
+    }
+    if (!locationType || !locationDetails.trim()) {
       toast.error("Please specify delivery location")
       return
     }
     if (!requiredTime) {
       toast.error("Please specify when you need the food")
+      return
+    }
+    if (new Date(requiredTime) <= new Date()) {
+      toast.error("Required time must be in the future")
       return
     }
 
@@ -250,7 +260,11 @@ export default function FoodPage() {
                         type="number"
                         min="1"
                         value={item.quantity}
-                        onChange={(e) => updateFoodItem(index, "quantity", parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (/[^0-9]/.test(v)) return
+                          updateFoodItem(index, "quantity", parseInt(v) || 1)
+                        }}
                         className="w-20"
                       />
                       {foodItems.length > 1 && (

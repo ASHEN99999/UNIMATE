@@ -21,9 +21,32 @@ export default function AddLaundryServicePage() {
     closeTime: "18:00",
   })
 
+  const isPhoneValid = (v: string) => /^[0-9+\-\s()]{7,15}$/.test(v.trim())
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
+    if (!formData.businessName.trim()) {
+      toast.error("Business name is required")
+      return
+    }
+    if (!formData.location.trim()) {
+      toast.error("Location is required")
+      return
+    }
+    if (!formData.contactNumber.trim()) {
+      toast.error("Contact number is required")
+      return
+    }
+    if (!isPhoneValid(formData.contactNumber)) {
+      toast.error("Phone number must be 7–15 digits — no letters allowed")
+      return
+    }
+    if (formData.openTime >= formData.closeTime) {
+      toast.error("Opening time must be before closing time")
+      return
+    }
+
     try {
       setIsSubmitting(true)
       
@@ -31,7 +54,7 @@ export default function AddLaundryServicePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
         },
         body: JSON.stringify({
           ...formData,
@@ -125,11 +148,18 @@ export default function AddLaundryServicePage() {
               <Label htmlFor="contactNumber">Contact Number *</Label>
               <Input
                 id="contactNumber"
+                type="tel"
                 value={formData.contactNumber}
-                onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (/[a-zA-Z]/.test(v)) return
+                  setFormData({ ...formData, contactNumber: v })
+                }}
                 placeholder="e.g., 0771234567"
+                maxLength={15}
                 required
               />
+              <p className="text-xs text-muted-foreground">Digits only — no letters allowed</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -23,7 +23,7 @@ class ApiClient {
    */
   private getToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('unimate_token');
+    return sessionStorage.getItem('unimate_token');
   }
 
   /**
@@ -31,7 +31,7 @@ class ApiClient {
    */
   setToken(token: string): void {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('unimate_token', token);
+      sessionStorage.setItem('unimate_token', token);
     }
   }
 
@@ -40,8 +40,8 @@ class ApiClient {
    */
   removeToken(): void {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('unimate_token');
-      localStorage.removeItem('unimate_user');
+      sessionStorage.removeItem('unimate_token');
+      sessionStorage.removeItem('unimate_user');
     }
   }
 

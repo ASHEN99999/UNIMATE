@@ -520,6 +520,30 @@ export class HousingService {
             };
         });
     }
+
+    /**
+     * Get a single reservation with full populated details (for PDF generation)
+     */
+    async getReservationWithDetails(reservationId: string, studentId: string) {
+        const reservation = await Reservation.findById(reservationId)
+            .populate('studentId', 'name universityEmail')
+            .populate({
+                path: 'listingId',
+                select: 'title location propertyType roomType amenities price contactPhone',
+                populate: { path: 'createdBy', select: 'name' }
+            });
+
+        if (!reservation) {
+            throw new Error('Reservation not found');
+        }
+
+        // Only the student who made the reservation can download the PDF
+        if (reservation.studentId._id.toString() !== studentId) {
+            throw new Error('Not authorized');
+        }
+
+        return reservation;
+    }
 }
 
 export default new HousingService();

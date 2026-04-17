@@ -24,8 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const storedUser = localStorage.getItem("unimate_user")
-        const token = localStorage.getItem("unimate_token")
+        const storedUser = sessionStorage.getItem("unimate_user")
+        const token = sessionStorage.getItem("unimate_token")
         
         if (storedUser && token) {
           // Immediately set user from localStorage
@@ -37,13 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const freshUserData = await authService.getProfile()
             setUser(freshUserData)
-            localStorage.setItem("unimate_user", JSON.stringify(freshUserData))
+            sessionStorage.setItem("unimate_user", JSON.stringify(freshUserData))
           } catch (error) {
             // Only clear user if it's a 401 (unauthorized)
             // Don't clear on network errors or if backend is down
             if (error instanceof Error && error.message.includes("401")) {
-              localStorage.removeItem("unimate_user")
-              localStorage.removeItem("unimate_token")
+              sessionStorage.removeItem("unimate_user")
+              sessionStorage.removeItem("unimate_token")
               setUser(null)
             }
             // Otherwise keep the cached user
@@ -53,8 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         // Failed to parse stored user, clear it
-        localStorage.removeItem("unimate_user")
-        localStorage.removeItem("unimate_token")
+        sessionStorage.removeItem("unimate_user")
+        sessionStorage.removeItem("unimate_token")
         setUser(null)
         setIsLoading(false)
       }
@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       
       setUser(response.user)
-      localStorage.setItem("unimate_user", JSON.stringify(response.user))
+      sessionStorage.setItem("unimate_user", JSON.stringify(response.user))
     } catch (error) {
       throw error
     } finally {
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       
       setUser(response.user)
-      localStorage.setItem("unimate_user", JSON.stringify(response.user))
+      sessionStorage.setItem("unimate_user", JSON.stringify(response.user))
     } catch (error) {
       throw error
     } finally {
@@ -105,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     authService.logout()
     setUser(null)
-    localStorage.removeItem("unimate_user")
+    sessionStorage.removeItem("unimate_user")
   }, [])
 
   const updateProfile = useCallback(async (data: Partial<User>) => {
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const updatedUser = await authService.updateProfile(data)
       setUser(updatedUser)
-      localStorage.setItem("unimate_user", JSON.stringify(updatedUser))
+      sessionStorage.setItem("unimate_user", JSON.stringify(updatedUser))
     } catch (error) {
       throw error
     } finally {
