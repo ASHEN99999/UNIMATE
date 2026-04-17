@@ -49,6 +49,7 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
+  FileDown,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -75,6 +76,8 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
   const [duration, setDuration] = useState("12")
   const [message, setMessage] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [myReservation, setMyReservation] = useState<import("@/lib/types").HousingReservation | null>(null)
+  const [isPdfDownloading, setIsPdfDownloading] = useState(false)
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -94,6 +97,17 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
       fetchListing()
     }
   }, [id])
+
+  // Load student's existing reservation for this listing (for PDF button)
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== "student") return
+    housingService.getMyReservations().then((reservations) => {
+      const mine = reservations.find(
+        (r: any) => r.listingId === id || r.listingId?.id === id || r.listingId?._id === id
+      )
+      if (mine) setMyReservation(mine)
+    }).catch(() => {})
+  }, [id, isAuthenticated, user])
 
   if (isLoading) {
     return (
@@ -118,18 +132,32 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
     )
   }
 
+  const handleDownloadPDF = async (reservationId: string) => {
+    try {
+      setIsPdfDownloading(true)
+      await housingService.downloadReservationPDF(reservationId)
+      toast.success("PDF downloaded successfully!")
+    } catch {
+      toast.error("Failed to download PDF")
+    } finally {
+      setIsPdfDownloading(false)
+    }
+  }
+
   const handleReservation = async () => {
     if (!checkInDate) {
       toast.error("Please select a check-in date")
       return
     }
-
+    if (new Date(checkInDate) < new Date()) {
+      toast.error("Move-in date must be in the future")
+      return
+    }
     if (!isAuthenticated) {
       toast.error("Please log in to make a reservation")
       router.push("/login")
       return
     }
-
     if (user?.role !== "student") {
       toast.error("Only students can make reservations")
       return
@@ -147,7 +175,12 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
       toast.success("Reservation request sent!", {
         description: "The provider will review your request shortly.",
       })
-      
+      // Refresh my reservation so the PDF button appears
+      try {
+        const reservations = await housingService.getMyReservations()
+        const mine = reservations.find((r: any) => r.listingId === id || r.listingId?.id === id || r.listingId?._id === id)
+        if (mine) setMyReservation(mine)
+      } catch {}
       // Reset form
       setCheckInDate(undefined)
       setMessage("")
@@ -420,6 +453,19 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+              )}
+
+              {myReservation && (
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  size="lg"
+                  disabled={isPdfDownloading}
+                  onClick={() => handleDownloadPDF(myReservation.id)}
+                >
+                  <FileDown className="mr-2 h-4 w-4" />
+                  {isPdfDownloading ? "Generating PDF..." : "Download Booking PDF"}
+                </Button>
               )}
 
               {!isAuthenticated && (

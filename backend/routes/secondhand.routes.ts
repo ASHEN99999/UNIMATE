@@ -18,4 +18,11 @@ router.post('/items/:itemId/reserve', protect, SecondHandMarketplaceController.r
 router.post('/items/:itemId/cancel-reservation', protect, SecondHandMarketplaceController.cancelReservation);
 router.post('/items/:itemId/mark-sold', protect, SecondHandMarketplaceController.markAsSold);
 
+// Offer / Negotiation routes
+router.post('/items/:itemId/offers', protect, SecondHandMarketplaceController.createOffer);
+router.get('/items/:itemId/offers', protect, SecondHandMarketplaceController.getItemOffers);
+router.get('/offers/my-offers', protect, SecondHandMarketplaceController.getMyOffers);
+router.put('/offers/:offerId/respond', protect, SecondHandMarketplaceController.respondToOffer);
+router.put('/offers/:offerId/withdraw', protect, SecondHandMarketplaceController.withdrawOffer);
+
 export default router;

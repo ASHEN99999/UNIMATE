@@ -7,8 +7,16 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { mockLaundryProviders, mockLaundryBookings } from "@/lib/mock-data"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+// mock-data imports removed - using real API data
 import { useAuth } from "@/context/auth-context"
+import { laundryService } from "@/lib/services/laundry.service"
 import {
   Shirt,
   MapPin,
@@ -19,6 +27,7 @@ import {
   Package,
   Plus,
   Loader2,
+  QrCode,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -52,6 +61,10 @@ export default function LaundryPage() {
   const [myService, setMyService] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingService, setIsLoadingService] = useState(false)
+  const [providers, setProviders] = useState<any[]>([])
+  const [isLoadingProviders, setIsLoadingProviders] = useState(false)
+  const [userBookings, setUserBookings] = useState<any[]>([])
+  const [isLoadingBookings, setIsLoadingBookings] = useState(false)
 
   const isLaundryProvider = user?.role === "provider" && user?.providerType === "laundry"
 
@@ -63,15 +76,56 @@ export default function LaundryPage() {
       } else if (tab === "my-services") {
         fetchMyService()
       }
+    } else {
+      fetchProviders()
+      fetchUserBookings()
     }
   }, [tab, isLaundryProvider])
+
+  const fetchUserBookings = async () => {
+    try {
+      setIsLoadingBookings(true)
+      const response = await fetch('http://localhost:5000/api/laundry/bookings', {
+        headers: {
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
+        }
+      })
+      const data = await response.json()
+      if (data.success) {
+        setUserBookings(data.data || [])
+      }
+    } catch (error) {
+      console.error("Failed to load bookings:", error)
+    } finally {
+      setIsLoadingBookings(false)
+    }
+  }
+
+  const fetchProviders = async () => {
+    try {
+      setIsLoadingProviders(true)
+      const response = await fetch('http://localhost:5000/api/laundry/providers', {
+        headers: {
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
+        }
+      })
+      const data = await response.json()
+      if (data.success) {
+        setProviders(data.data || [])
+      }
+    } catch (error) {
+      console.error("Failed to load providers:", error)
+    } finally {
+      setIsLoadingProviders(false)
+    }
+  }
 
   const fetchMyService = async () => {
     try {
       setIsLoadingService(true)
       const response = await fetch('http://localhost:5000/api/laundry/providers/my-provider', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
         }
       })
       const data = await response.json()
@@ -90,7 +144,7 @@ export default function LaundryPage() {
       setIsLoading(true)
       const response = await fetch('http://localhost:5000/api/laundry/bookings', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('unimate_token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('unimate_token')}`
         }
       })
       const data = await response.json()
@@ -103,16 +157,7 @@ export default function LaundryPage() {
     }
   }
 
-  // Get user's bookings from localStorage + mock data
-  const getUserBookings = () => {
-    const storedBookings = JSON.parse(localStorage.getItem("unimate_laundry_bookings") || "[]")
-    const userBookings = [...storedBookings, ...mockLaundryBookings].filter(
-      (booking) => booking.studentId === user?.id
-    )
-    return userBookings
-  }
-
-  const userBookings = getUserBookings()
+  // userBookings fetched from API via fetchUserBookings
 
   return (
     <div className="space-y-6">
@@ -182,18 +227,38 @@ export default function LaundryPage() {
         {!isLaundryProvider && (
           <>
             <TabsContent value="providers" className="mt-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {mockLaundryProviders.map((provider) => (
-              <ProviderCard key={provider.id} provider={provider} />
-            ))}
-          </div>
+          {isLoadingProviders ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : providers.length > 0 ? (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {providers.map((provider) => (
+                <ProviderCard key={provider.id || provider._id} provider={provider} />
+              ))}
+            </div>
+          ) : (
+            <Card className="p-12">
+              <div className="text-center">
+                <Shirt className="mx-auto h-12 w-12 text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-semibold">No providers yet</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  No laundry service providers are available at the moment.
+                </p>
+              </div>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="bookings" className="mt-6">
-          {userBookings.length > 0 ? (
+          {isLoadingBookings ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : userBookings.length > 0 ? (
             <div className="space-y-4">
               {userBookings.map((booking) => (
-                <BookingCard key={booking.id} booking={booking} />
+                <BookingCard key={booking.id || booking._id} booking={booking} />
               ))}
             </div>
           ) : (
@@ -407,9 +472,9 @@ function OrdersTab({ orders, isLoading, onRefresh }: { orders: any[], isLoading:
   )
 }
 
-function ProviderCard({ provider }: { provider: typeof mockLaundryProviders[0] }) {
+function ProviderCard({ provider }: { provider: any }) {
   return (
-    <Link href={`/laundry/${provider.id}`}>
+    <Link href={`/laundry/${provider._id || provider.id}`}>
       <Card className="h-full transition-all hover:shadow-lg hover:border-[oklch(0.55_0.16_280)]/50 cursor-pointer group">
         <CardHeader>
           <div className="flex items-start justify-between">
@@ -429,12 +494,14 @@ function ProviderCard({ provider }: { provider: typeof mockLaundryProviders[0] }
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span>
-              {provider.operatingHours.open} - {provider.operatingHours.close}
-            </span>
-          </div>
+          {provider.operatingHours && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              <span>
+                {provider.operatingHours.open} - {provider.operatingHours.close}
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Phone className="h-4 w-4" />
             <span>{provider.contactNumber}</span>
@@ -452,7 +519,7 @@ function ProviderCard({ provider }: { provider: typeof mockLaundryProviders[0] }
             <div>
               <span className="text-xs text-muted-foreground">Starting from</span>
               <p className="font-semibold text-[oklch(0.55_0.16_280)]">
-                Rs. {Math.min(...provider.clothesCategories.map((c) => c.pricePerPiece))}/piece
+                Rs. {provider.clothesCategories?.length > 0 ? Math.min(...provider.clothesCategories.map((c: any) => c.pricePerItem)) : 0}/piece
               </p>
             </div>
             <Button size="sm" variant="outline" className="group-hover:bg-primary group-hover:text-primary-foreground">
@@ -466,9 +533,26 @@ function ProviderCard({ provider }: { provider: typeof mockLaundryProviders[0] }
   )
 }
 
-function BookingCard({ booking }: { booking: typeof mockLaundryBookings[0] }) {
-  const provider = mockLaundryProviders.find((p) => p.id === booking.providerId)
+function BookingCard({ booking }: { booking: any }) {
+  const providerName = typeof booking.providerId === 'object'
+    ? booking.providerId?.businessName
+    : undefined
   const status = booking.status as keyof typeof statusColors
+  const [qrData, setQrData] = useState<{ qrCode: string; booking: any } | null>(null)
+  const [isLoadingQR, setIsLoadingQR] = useState(false)
+
+  const handleShowQR = async () => {
+    if (qrData) return // already loaded
+    try {
+      setIsLoadingQR(true)
+      const data = await laundryService.getBookingQRCode(booking.id)
+      setQrData(data)
+    } catch {
+      toast.error("Could not generate QR code for this booking")
+    } finally {
+      setIsLoadingQR(false)
+    }
+  }
 
   return (
     <Card>
@@ -484,12 +568,12 @@ function BookingCard({ booking }: { booking: typeof mockLaundryBookings[0] }) {
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            {provider?.businessName || "Unknown Provider"}
+            {providerName || booking.providerName || "Unknown Provider"}
           </p>
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
-            <span>{booking.clothesItems.reduce((acc, item) => acc + item.quantity, 0)} items</span>
-            <span>{booking.selectedServices.join(", ")}</span>
-            <span>{booking.serviceDuration}</span>
+            <span>{booking.clothesItems?.reduce((acc: number, item: any) => acc + item.quantity, 0)} items</span>
+            <span>{Array.isArray(booking.selectedServices) ? booking.selectedServices.map((s: any) => s.name || s).join(", ") : ""}</span>
+            <span>{booking.serviceDuration?.duration || booking.serviceDuration}</span>
           </div>
         </div>
         <div className="text-right flex-shrink-0">
@@ -498,11 +582,67 @@ function BookingCard({ booking }: { booking: typeof mockLaundryBookings[0] }) {
             Collection: {new Date(booking.collectionDate).toLocaleDateString()}
           </p>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/laundry/booking/${booking.id}`}>
-            View Details
-          </Link>
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/laundry/booking/${booking.id || booking._id}`}>
+              View Details
+            </Link>
+          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" onClick={handleShowQR}>
+                {isLoadingQR ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <QrCode className="mr-2 h-4 w-4" />
+                )}
+                QR Ticket
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Booking QR Ticket</DialogTitle>
+              </DialogHeader>
+              {isLoadingQR ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                </div>
+              ) : qrData ? (
+                <div className="flex flex-col items-center gap-4 py-4">
+                  <img src={qrData.qrCode} alt="Booking QR Code" className="w-56 h-56 rounded-lg border" />
+                  <div className="w-full text-sm space-y-1 border rounded-lg p-3 bg-muted/30">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Order</span>
+                      <span className="font-medium">{qrData.booking.orderNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status</span>
+                      <Badge variant="outline" className={statusColors[qrData.booking.status as keyof typeof statusColors]}>
+                        {statusLabels[qrData.booking.status as keyof typeof statusLabels]}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total</span>
+                      <span className="font-medium">Rs. {qrData.booking.totalPrice?.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Collection</span>
+                      <span className="font-medium">{new Date(qrData.booking.collectionDate).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Show this QR code to the laundry provider for pickup/handover verification.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
+                  <QrCode className="h-12 w-12" />
+                  <p className="text-sm">QR code not available for this booking.</p>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        </div>
       </CardContent>
     </Card>
   )

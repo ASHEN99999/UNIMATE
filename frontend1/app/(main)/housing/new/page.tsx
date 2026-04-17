@@ -81,6 +81,9 @@ export default function NewHousingListingPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
+    // Block non-numeric input for phone and numeric fields
+    if (name === "contactPhone" && /[^0-9+\-\s()]/.test(value)) return
+    if ((name === "price" || name === "distance") && /[^0-9.]/.test(value)) return
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
@@ -175,6 +178,23 @@ export default function NewHousingListingPage() {
 
     if (!formData.contactPhone) {
       toast.error("Please provide contact phone number")
+      return
+    }
+    if (!/^[0-9+\-\s()]{7,15}$/.test(formData.contactPhone.trim())) {
+      toast.error("Please enter a valid phone number (digits only, 7–15 characters)")
+      return
+    }
+    const priceNum = parseFloat(formData.price)
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast.error("Monthly rent must be a positive number")
+      return
+    }
+    if (formData.title.trim().length < 5) {
+      toast.error("Title must be at least 5 characters")
+      return
+    }
+    if (formData.description.trim().length < 20) {
+      toast.error("Description must be at least 20 characters")
       return
     }
 
@@ -581,8 +601,10 @@ export default function NewHousingListingPage() {
                   placeholder="e.g., 0771234567"
                   value={formData.contactPhone}
                   onChange={handleInputChange}
+                  maxLength={15}
                   required
                 />
+                <p className="text-xs text-muted-foreground">Digits only — no letters allowed</p>
               </div>
 
               <div className="space-y-2">

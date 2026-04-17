@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,7 @@ import { mockSecondHandItems } from "@/lib/mock-data"
 import { useAuth } from "@/context/auth-context"
 import { cn } from "@/lib/utils"
 import type { SecondHandItem } from "@/lib/types"
+import { secondhandService } from "@/lib/services/secondhand.service"
 import {
   ArrowLeft,
   ShoppingBag,
@@ -37,6 +39,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
+  MessageSquare,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -74,6 +77,10 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
   const [reserveDialogOpen, setReserveDialogOpen] = useState(false)
   const [contactPhone, setContactPhone] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [offerDialogOpen, setOfferDialogOpen] = useState(false)
+  const [offerPrice, setOfferPrice] = useState("")
+  const [offerMessage, setOfferMessage] = useState("")
+  const [isOfferSubmitting, setIsOfferSubmitting] = useState(false)
 
   useEffect(() => {
     // Check localStorage first, then mock data
@@ -107,6 +114,45 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
         </Button>
       </div>
     )
+  }
+
+  const handleMakeOffer = async () => {
+    const price = parseFloat(offerPrice)
+    if (!offerPrice || isNaN(price) || price <= 0) {
+      toast.error("Please enter a valid offer price")
+      return
+    }
+    if (!/^[0-9.]+$/.test(offerPrice)) {
+      toast.error("Offer price must be a number — no letters allowed")
+      return
+    }
+    if (!user) {
+      toast.error("Please log in to make an offer")
+      return
+    }
+    if (contactPhone && !/^[0-9+\-\s()]{7,15}$/.test(contactPhone.trim())) {
+      toast.error("Phone number must be 7–15 digits — no letters allowed")
+      return
+    }
+    try {
+      setIsOfferSubmitting(true)
+      await secondhandService.createOffer(id, {
+        offerPrice: price,
+        message: offerMessage,
+        buyerName: user.name,
+        buyerContact: contactPhone || user.contactPhone || "N/A",
+      })
+      setOfferDialogOpen(false)
+      setOfferPrice("")
+      setOfferMessage("")
+      toast.success("Offer submitted!", {
+        description: "The seller will review your offer and respond shortly.",
+      })
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit offer")
+    } finally {
+      setIsOfferSubmitting(false)
+    }
   }
 
   const handleReserve = async () => {
@@ -307,80 +353,151 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
               )}
 
               {/* Action Buttons */}
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
                 {item.status === "available" && !isOwner && (
                   <>
                     {isAuthenticated ? (
-                      <Dialog open={reserveDialogOpen} onOpenChange={setReserveDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button className="flex-1 bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]">
-                            Reserve Item
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Reserve Item</DialogTitle>
-                            <DialogDescription>
-                              Reserve this item for 48 hours while you arrange pickup with the seller.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4 py-4">
-                            <Card className="bg-muted/50">
-                              <CardContent className="flex items-center gap-4 p-4">
-                                <div className="relative h-16 w-16 rounded-md overflow-hidden">
-                                  <Image
-                                    src={images[0]}
-                                    alt={item.title}
-                                    fill
-                                    className="object-cover"
-                                  />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium truncate">{item.title}</p>
-                                  <p className="text-lg font-bold text-[oklch(0.50_0.15_145)]">
-                                    Rs. {item.price.toLocaleString()}
-                                  </p>
-                                </div>
-                              </CardContent>
-                            </Card>
-
-                            <div className="space-y-2">
-                              <Label>Your Contact Number</Label>
-                              <Input
-                                type="tel"
-                                placeholder="Enter your phone number"
-                                value={contactPhone}
-                                onChange={(e) => setContactPhone(e.target.value)}
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                The seller will contact you on this number
-                              </p>
-                            </div>
-
-                            <div className="p-3 rounded-lg bg-amber-500/10 text-sm text-amber-700">
-                              <p className="font-medium mb-1">Important:</p>
-                              <ul className="list-disc list-inside space-y-1">
-                                <li>Reservation expires in 48 hours</li>
-                                <li>Contact the seller to arrange pickup</li>
-                                <li>Payment is made directly to the seller</li>
-                              </ul>
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button variant="outline" onClick={() => setReserveDialogOpen(false)}>
-                              Cancel
+                      <>
+                        <Dialog open={reserveDialogOpen} onOpenChange={setReserveDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button className="flex-1 bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]">
+                              Reserve Item
                             </Button>
-                            <Button
-                              onClick={handleReserve}
-                              disabled={isSubmitting || !contactPhone}
-                              className="bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]"
-                            >
-                              {isSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : null}
-                              Confirm Reservation
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Reserve Item</DialogTitle>
+                              <DialogDescription>
+                                Reserve this item for 48 hours while you arrange pickup with the seller.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <Card className="bg-muted/50">
+                                <CardContent className="flex items-center gap-4 p-4">
+                                  <div className="relative h-16 w-16 rounded-md overflow-hidden">
+                                    <Image
+                                      src={images[0]}
+                                      alt={item.title}
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium truncate">{item.title}</p>
+                                    <p className="text-lg font-bold text-[oklch(0.50_0.15_145)]">
+                                      Rs. {item.price.toLocaleString()}
+                                    </p>
+                                  </div>
+                                </CardContent>
+                              </Card>
+
+                              <div className="space-y-2">
+                                <Label>Your Contact Number</Label>
+                                <Input
+                                  type="tel"
+                                  placeholder="Enter your phone number"
+                                  value={contactPhone}
+                                  onChange={(e) => setContactPhone(e.target.value)}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  The seller will contact you on this number
+                                </p>
+                              </div>
+
+                              <div className="p-3 rounded-lg bg-amber-500/10 text-sm text-amber-700">
+                                <p className="font-medium mb-1">Important:</p>
+                                <ul className="list-disc list-inside space-y-1">
+                                  <li>Reservation expires in 48 hours</li>
+                                  <li>Contact the seller to arrange pickup</li>
+                                  <li>Payment is made directly to the seller</li>
+                                </ul>
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setReserveDialogOpen(false)}>
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={handleReserve}
+                                disabled={isSubmitting || !contactPhone}
+                                className="bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]"
+                              >
+                                {isSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                                Confirm Reservation
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+
+                        {/* Make an Offer dialog */}
+                        <Dialog open={offerDialogOpen} onOpenChange={setOfferDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" className="flex-1">
+                              <MessageSquare className="mr-2 h-4 w-4" />
+                              Make an Offer
                             </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Make a Price Offer</DialogTitle>
+                              <DialogDescription>
+                                Seller listed this item for <strong>Rs. {item.price.toLocaleString()}</strong>. Submit your offer price and the seller will accept, reject, or counter.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="space-y-2">
+                                <Label>Your Offer Price (Rs.)</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  placeholder={`Up to Rs. ${item.price.toLocaleString()}`}
+                                  value={offerPrice}
+                                  onChange={(e) => {
+                                    const v = e.target.value
+                                    if (/[^0-9.]/.test(v)) return
+                                    setOfferPrice(v)
+                                  }}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Contact Number</Label>
+                                <Input
+                                  type="tel"
+                                  placeholder="Your phone number"
+                                  value={contactPhone}
+                                  onChange={(e) => {
+                                    const v = e.target.value
+                                    if (/[a-zA-Z]/.test(v)) return
+                                    setContactPhone(v)
+                                  }}
+                                  maxLength={15}
+                                />
+                                <p className="text-xs text-muted-foreground">Digits only — no letters allowed</p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Message to Seller (optional)</Label>
+                                <Textarea
+                                  placeholder="e.g. Can you do Rs. 1500? I can pick up today."
+                                  value={offerMessage}
+                                  onChange={(e) => setOfferMessage(e.target.value)}
+                                />
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setOfferDialogOpen(false)}>
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={handleMakeOffer}
+                                disabled={isOfferSubmitting || !offerPrice}
+                              >
+                                {isOfferSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                                Submit Offer
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </>
                     ) : (
                       <Button className="flex-1" asChild>
                         <Link href="/login">Login to Reserve</Link>

@@ -15,6 +15,7 @@ router.put('/providers/:providerId', protect, LaundryController.updateProvider);
 router.post('/bookings', protect, LaundryController.createBooking);
 router.get('/bookings', protect, LaundryController.getMyBookings);
 router.get('/bookings/:bookingId', protect, LaundryController.getBookingById);
+router.get('/bookings/:bookingId/qr', protect, LaundryController.getBookingQRCode);
 router.patch('/bookings/:bookingId/status', protect, LaundryController.updateBookingStatus);
 router.patch('/bookings/:bookingId/payment', protect, LaundryController.updatePaymentStatus);
 router.post('/bookings/:bookingId/review', protect, LaundryController.addReview);

@@ -1,5 +1,4 @@
 node_modules
-.env
 dist
 build
 .DS_Store
@@ -13,3 +12,4 @@ pnpm-debug.log*
 lerna-debug.log*
 
 */node_modules
+config.bat

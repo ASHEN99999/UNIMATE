@@ -15,7 +15,8 @@ import {
     toggleListingStatus,
     getProviderDashboard,
     getAdminDashboard,
-    getAllProviderReservations
+    getAllProviderReservations,
+    downloadReservationPDF
 } from '../controllers/housing.controller';
 import { protect, authorize, optionalAuth } from '../middleware/auth';
 
@@ -51,6 +52,7 @@ router.put('/:id/reject', protect, authorize('admin'), rejectListing);
 // Student routes - Reservations (actions)
 router.post('/:id/reserve', protect, authorize('student'), createReservation);
 router.put('/reservations/:id/cancel', protect, authorize('student'), cancelReservation);
+router.get('/reservations/:id/pdf', protect, authorize('student'), downloadReservationPDF);
 
 // Provider routes - Reservations (actions)
 router.put('/reservations/:id/:action', protect, authorize('provider'), respondToReservation);

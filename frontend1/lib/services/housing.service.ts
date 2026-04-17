@@ -96,6 +96,22 @@ export const housingService = {
   async cancelReservation(id: string): Promise<HousingReservation> {
     return apiClient.patch<HousingReservation>(`/housing/reservations/${id}/cancel`);
   },
+
+  async downloadReservationPDF(reservationId: string): Promise<void> {
+    const token = typeof window !== 'undefined' ? sessionStorage.getItem('unimate_token') : null;
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/housing/reservations/${reservationId}/pdf`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!response.ok) throw new Error('Failed to download PDF');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reservation-${reservationId}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
 
 export default housingService;
