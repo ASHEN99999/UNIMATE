@@ -177,6 +177,39 @@ export class SecondHandMarketplaceService {
     return await item.save();
   }
 
+  async purchaseItem(
+    itemId: string,
+    buyerId: string,
+    buyerName: string,
+    buyerContact: string
+  ): Promise<ISecondHandItem | null> {
+    const item = await SecondHandItem.findById(itemId);
+
+    if (!item) {
+      throw new Error('Item not found');
+    }
+
+    if (item.status === 'sold') {
+      throw new Error('This item has already been sold');
+    }
+
+    if (item.status === 'reserved' && item.buyerId?.toString() !== buyerId) {
+      throw new Error('This item is reserved by another buyer');
+    }
+
+    if (item.sellerId.toString() === buyerId) {
+      throw new Error('You cannot purchase your own item');
+    }
+
+    item.status = 'sold';
+    item.buyerId = new (require('mongoose').Types.ObjectId)(buyerId);
+    item.buyerName = buyerName;
+    item.buyerContact = buyerContact;
+    item.soldAt = new Date();
+
+    return await item.save();
+  }
+
   async markAsSold(itemId: string, sellerId: string): Promise<ISecondHandItem | null> {
     const item = await SecondHandItem.findById(itemId);
     

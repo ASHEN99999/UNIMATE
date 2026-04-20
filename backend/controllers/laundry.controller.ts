@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import LaundryService from '../services/laundry.service';
+import QRCode from 'qrcode';
 
 // Provider endpoints
 export const createProvider = async (req: Request, res: Response): Promise<void> => {
@@ -283,4 +284,61 @@ export const addReview = async (req: Request, res: Response): Promise<void> => {
         message: error.message || 'Failed to add review',
       });
     }
+};
+
+// @desc    Get QR code ticket for a booking (student only - own bookings)
+// @route   GET /api/laundry/bookings/:bookingId/qr
+// @access  Private (Student)
+export const getBookingQRCode = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+    const studentId = (req as any).user.userId;
+
+    const booking = await LaundryService.getBookingById(bookingId);
+
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+
+    if (booking.studentId.toString() !== studentId) {
+      res.status(403).json({ success: false, message: 'Not authorized' });
+      return;
+    }
+
+    // Encode key booking details into the QR code payload
+    const qrPayload = JSON.stringify({
+      bookingId: booking._id,
+      orderNumber: booking.orderNumber,
+      studentName: booking.studentName,
+      totalPrice: booking.totalPrice,
+      collectionDate: booking.collectionDate,
+      status: booking.status,
+    });
+
+    const qrDataURL = await QRCode.toDataURL(qrPayload, {
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      width: 300,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        qrCode: qrDataURL,
+        booking: {
+          orderNumber: booking.orderNumber,
+          studentName: booking.studentName,
+          totalPrice: booking.totalPrice,
+          collectionDate: booking.collectionDate,
+          status: booking.status,
+        },
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to generate QR code',
+    });
+  }
 };

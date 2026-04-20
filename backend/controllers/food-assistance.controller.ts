@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import FoodAssistanceService from '../services/food-assistance.service';
+import User from '../models/User';
+import { sendFoodStatusEmail } from '../utils/email.service';
 
 // Food Request endpoints
 export const createRequest = async (req: Request, res: Response): Promise<void> => {
@@ -139,6 +141,25 @@ export const acceptRequest = async (req: Request, res: Response): Promise<void> 
       helperContact
     );
 
+    // Send email notification to requester
+    try {
+      const requester = await User.findById(request?.requesterId).select('universityEmail name');
+      if (requester) {
+        await sendFoodStatusEmail({
+          toEmail:       requester.universityEmail,
+          studentName:   requester.name,
+          requestNumber: request?.requestNumber ?? requestId,
+          newStatus:     'accepted',
+          mealType:      request?.mealType ?? '',
+          helperName,
+          helperContact,
+          totalCost:     request?.totalCost,
+        });
+      }
+    } catch (emailErr) {
+      console.error('[Email] Failed to send accept notification:', emailErr);
+    }
+
     res.status(200).json({
       success: true,
       data: request,
@@ -165,6 +186,25 @@ export const updateRequestStatus = async (req: Request, res: Response): Promise<
       userId,
       userRole
     );
+
+    // Send email notification to requester on every status change
+    try {
+      const requester = await User.findById(request?.requesterId).select('universityEmail name');
+      if (requester) {
+        await sendFoodStatusEmail({
+          toEmail:       requester.universityEmail,
+          studentName:   requester.name,
+          requestNumber: request?.requestNumber ?? requestId,
+          newStatus:     status,
+          mealType:      request?.mealType ?? '',
+          helperName:    request?.helperName,
+          helperContact: request?.helperContact,
+          totalCost:     request?.totalCost,
+        });
+      }
+    } catch (emailErr) {
+      console.error('[Email] Failed to send status notification:', emailErr);
+    }
 
     res.status(200).json({
       success: true,

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import housingService from '../services/housing.service';
+import { generateReservationPDF } from '../utils/pdf.generator';
 
 // @desc    Create a new housing listing (Provider only)
 // @route   POST /api/housing
@@ -15,6 +16,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
             propertyType,
             roomType,
             amenities,
+            images,
             contactPhone,
             rulesAndRegulations
         } = req.body;
@@ -45,6 +47,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
                 propertyType,
                 roomType,
                 amenities,
+                images,
                 contactPhone,
                 rulesAndRegulations,
                 createdBy: req.user?.userId!
@@ -54,7 +57,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
 
         res.status(201).json({
             success: true,
-            message: 'Listing created successfully. Waiting for admin approval.',
+            message: 'Listing created successfully and is now live!',
             data: listing
         });
     } catch (error) {
@@ -482,6 +485,46 @@ export const getAllProviderReservations = async (req: AuthRequest, res: Response
         res.status(500).json({
             success: false,
             message: (error as Error).message
+        });
+    }
+};
+
+// @desc    Download reservation confirmation as PDF (Student only - own reservations)
+// @route   GET /api/housing/reservations/:id/pdf
+// @access  Private (Student)
+export const downloadReservationPDF = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const reservation = await housingService.getReservationWithDetails(
+            req.params.id,
+            req.user?.userId!
+        );
+
+        generateReservationPDF({
+            reservationId:   (reservation as any)._id?.toString() ?? reservation.id,
+            studentName:     (reservation as any).studentId?.name ?? 'N/A',
+            studentEmail:    (reservation as any).studentId?.universityEmail ?? 'N/A',
+            listingTitle:    (reservation as any).listingId?.title ?? 'N/A',
+            listingAddress:  (reservation as any).listingId?.location?.address ?? 'N/A',
+            listingCity:     (reservation as any).listingId?.location?.city ?? 'N/A',
+            propertyType:    (reservation as any).listingId?.propertyType ?? 'N/A',
+            roomType:        (reservation as any).listingId?.roomType ?? 'N/A',
+            amenities:       (reservation as any).listingId?.amenities ?? [],
+            pricePerMonth:   (reservation as any).listingId?.price ?? 0,
+            moveInDate:      reservation.moveInDate,
+            providerName:    (reservation as any).listingId?.createdBy?.name ?? 'N/A',
+            contactPhone:    (reservation as any).listingId?.contactPhone ?? 'N/A',
+            reservationDate: reservation.createdAt,
+            status:          reservation.status,
+        }, res);
+    } catch (error) {
+        const errorMessage = (error as Error).message;
+        let statusCode = 500;
+        if (errorMessage === 'Reservation not found') statusCode = 404;
+        if (errorMessage === 'Not authorized') statusCode = 403;
+
+        res.status(statusCode).json({
+            success: false,
+            message: errorMessage,
         });
     }
 };

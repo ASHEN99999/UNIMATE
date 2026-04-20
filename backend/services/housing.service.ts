@@ -15,6 +15,7 @@ export interface CreateListingDto {
     propertyType: 'boarding' | 'room' | 'annex' | 'apartment';
     roomType: 'single' | 'shared' | 'full-house';
     amenities?: string[];
+    images?: string[];
     contactPhone: string;
     rulesAndRegulations?: string;
     createdBy: string;
@@ -69,10 +70,13 @@ export class HousingService {
             throw new Error('Your provider account must be approved before creating listings');
         }
 
+        // Since provider is already approved by admin, set listing as active immediately
         const listing = await HousingListing.create({
             ...listingData,
             createdBy: userId,
-            status: 'pending_approval'
+            status: 'active',  // Auto-approve listings from verified providers
+            approvedBy: user._id,  // Self-approved since provider is trusted
+            approvedAt: new Date()
         });
 
         return listing;
@@ -250,14 +254,17 @@ export class HousingService {
             throw new Error('Cannot reserve inactive listing');
         }
 
-        // Check if student already has a pending reservation for this listing
+        // Check if student already has a pending or accepted reservation for this listing
         const existingReservation = await Reservation.findOne({
             listingId,
             studentId,
-            status: 'pending'
+            status: { $in: ['pending', 'accepted'] }
         });
 
         if (existingReservation) {
+            if (existingReservation.status === 'accepted') {
+                throw new Error('You already have an accepted reservation for this listing');
+            }
             throw new Error('You already have a pending reservation for this listing');
         }
 
@@ -336,10 +343,17 @@ export class HousingService {
      */
     async getMyReservations(studentId: string) {
         const reservations = await Reservation.find({ studentId })
-            .populate('listingId', 'title location price images')
+            .populate('listingId', 'title location price images contactPhone')
             .sort({ createdAt: -1 });
 
-        return reservations;
+        // Transform to rename listingId to listing
+        return reservations.map((res: any) => {
+            const jsonRes = res.toJSON();
+            return {
+                ...jsonRes,
+                listing: jsonRes.listingId // Rename listingId to listing
+            };
+        });
     }
 
     /**
@@ -500,7 +514,39 @@ export class HousingService {
             .populate('studentId', 'name universityEmail contactNumber')
             .sort({ createdAt: -1 });
 
-        return reservations;
+        // Transform to include student name and rename listingId to listing
+        return reservations.map((res: any) => {
+            const jsonRes = res.toJSON();
+            return {
+                ...jsonRes,
+                listing: jsonRes.listingId, // Rename listingId to listing
+                studentName: res.studentId?.name
+            };
+        });
+    }
+
+    /**
+     * Get a single reservation with full populated details (for PDF generation)
+     */
+    async getReservationWithDetails(reservationId: string, studentId: string) {
+        const reservation = await Reservation.findById(reservationId)
+            .populate('studentId', 'name universityEmail')
+            .populate({
+                path: 'listingId',
+                select: 'title location propertyType roomType amenities price contactPhone',
+                populate: { path: 'createdBy', select: 'name' }
+            });
+
+        if (!reservation) {
+            throw new Error('Reservation not found');
+        }
+
+        // Only the student who made the reservation can download the PDF
+        if (reservation.studentId._id.toString() !== studentId) {
+            throw new Error('Not authorized');
+        }
+
+        return reservation;
     }
 }
 
