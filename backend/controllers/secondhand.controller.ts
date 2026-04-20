@@ -205,6 +205,32 @@ export const markAsSold = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+export const purchaseItem = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { itemId } = req.params;
+    const buyerId = (req as any).user.userId;
+    const { buyerName, buyerContact } = req.body;
+
+    if (!buyerName || !buyerContact) {
+      res.status(400).json({ success: false, message: 'Buyer name and contact are required' });
+      return;
+    }
+
+    const item = await SecondHandMarketplaceService.purchaseItem(itemId, buyerId, buyerName, buyerContact);
+
+    res.status(200).json({
+      success: true,
+      data: item,
+      message: 'Payment successful! Item has been purchased.',
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to complete purchase',
+    });
+  }
+};
+
 export const getMyStats = async (req: Request, res: Response): Promise<void> => {
   try {
     const sellerId = (req as any).user.userId;

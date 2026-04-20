@@ -17,6 +17,7 @@ router.delete('/items/:itemId', protect, SecondHandMarketplaceController.deleteI
 router.post('/items/:itemId/reserve', protect, SecondHandMarketplaceController.reserveItem);
 router.post('/items/:itemId/cancel-reservation', protect, SecondHandMarketplaceController.cancelReservation);
 router.post('/items/:itemId/mark-sold', protect, SecondHandMarketplaceController.markAsSold);
+router.post('/items/:itemId/purchase', protect, SecondHandMarketplaceController.purchaseItem);
 
 // Offer / Negotiation routes
 router.post('/items/:itemId/offers', protect, SecondHandMarketplaceController.createOffer);

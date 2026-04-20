@@ -21,7 +21,7 @@ export interface User {
 export type PropertyType = "boarding" | "room" | "annex" | "apartment"
 export type RoomType = "single" | "shared" | "full-house"
 export type ListingStatus = "pending_approval" | "active" | "inactive" | "rejected"
-export type ReservationStatus = "pending" | "approved" | "rejected" | "confirmed" | "cancelled" | "completed"
+export type ReservationStatus = "pending" | "accepted" | "rejected" | "cancelled"
 
 export interface HousingLocation {
   address: string

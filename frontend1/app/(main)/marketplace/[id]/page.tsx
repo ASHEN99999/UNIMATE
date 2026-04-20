@@ -26,6 +26,7 @@ import { useAuth } from "@/context/auth-context"
 import { cn } from "@/lib/utils"
 import type { SecondHandItem } from "@/lib/types"
 import { secondhandService } from "@/lib/services/secondhand.service"
+import { useCart } from "@/context/cart-context"
 import {
   ArrowLeft,
   ShoppingBag,
@@ -40,6 +41,9 @@ import {
   ChevronRight,
   Calendar,
   MessageSquare,
+  CreditCard,
+  Lock,
+  ShoppingCart,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -72,6 +76,7 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
   const { id } = use(params)
   const router = useRouter()
   const { user, isAuthenticated } = useAuth()
+  const { addToCart, removeFromCart, isInCart } = useCart()
   const [item, setItem] = useState<SecondHandItem | null>(null)
   const [selectedImage, setSelectedImage] = useState(0)
   const [reserveDialogOpen, setReserveDialogOpen] = useState(false)
@@ -81,6 +86,16 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
   const [offerPrice, setOfferPrice] = useState("")
   const [offerMessage, setOfferMessage] = useState("")
   const [isOfferSubmitting, setIsOfferSubmitting] = useState(false)
+
+  // Payment state
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false)
+  const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [cardNumber, setCardNumber] = useState("")
+  const [cardExpiry, setCardExpiry] = useState("")
+  const [cardCvv, setCardCvv] = useState("")
+  const [cardName, setCardName] = useState("")
+  const [paymentPhone, setPaymentPhone] = useState("")
 
   useEffect(() => {
     // Check localStorage first, then mock data
@@ -153,6 +168,55 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
     } finally {
       setIsOfferSubmitting(false)
     }
+  }
+
+  const handlePayment = async () => {
+    if (!cardNumber || !cardExpiry || !cardCvv || !cardName) {
+      toast.error("Please fill in all card details")
+      return
+    }
+    if (!/^\d{16}$/.test(cardNumber.replace(/\s/g, ""))) {
+      toast.error("Card number must be 16 digits")
+      return
+    }
+    if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) {
+      toast.error("Expiry must be in MM/YY format")
+      return
+    }
+    if (!/^\d{3,4}$/.test(cardCvv)) {
+      toast.error("CVV must be 3 or 4 digits")
+      return
+    }
+    if (!paymentPhone || !/^\d{10}$/.test(paymentPhone)) {
+      toast.error("Please enter a valid 10-digit contact number")
+      return
+    }
+    if (!user) return
+
+    try {
+      setIsPaymentSubmitting(true)
+      await secondhandService.purchaseItem(id, {
+        buyerName: user.name,
+        buyerContact: paymentPhone,
+      })
+      setPaymentSuccess(true)
+      setItem((prev) => prev ? { ...prev, status: "sold" } : prev)
+    } catch (err: any) {
+      toast.error(err.message || "Payment failed. Please try again.")
+    } finally {
+      setIsPaymentSubmitting(false)
+    }
+  }
+
+  const formatCardNumber = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 16)
+    return digits.replace(/(.{4})/g, "$1 ").trim()
+  }
+
+  const formatExpiry = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 4)
+    if (digits.length >= 3) return digits.slice(0, 2) + "/" + digits.slice(2)
+    return digits
   }
 
   const handleReserve = async () => {
@@ -358,6 +422,168 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
                   <>
                     {isAuthenticated ? (
                       <>
+                        {/* Add to Cart */}
+                        <Button
+                          variant={isInCart(item.id) ? "secondary" : "outline"}
+                          className="flex-1"
+                          onClick={() => isInCart(item.id) ? removeFromCart(item.id) : addToCart(item)}
+                        >
+                          <ShoppingCart className="mr-2 h-4 w-4" />
+                          {isInCart(item.id) ? "Remove from Cart" : "Add to Cart"}
+                        </Button>
+
+                        {/* Buy Now / Payment Dialog */}
+                        <Dialog open={paymentDialogOpen} onOpenChange={(open) => {
+                          setPaymentDialogOpen(open)
+                          if (!open) {
+                            setPaymentSuccess(false)
+                            setCardNumber("")
+                            setCardExpiry("")
+                            setCardCvv("")
+                            setCardName("")
+                            setPaymentPhone("")
+                          }
+                        }}>
+                          <DialogTrigger asChild>
+                            <Button className="flex-1 bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]">
+                              <CreditCard className="mr-2 h-4 w-4" />
+                              Buy Now
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-md">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2">
+                                <CreditCard className="h-5 w-5" />
+                                {paymentSuccess ? "Payment Successful!" : "Complete Payment"}
+                              </DialogTitle>
+                              <DialogDescription>
+                                {paymentSuccess
+                                  ? "Your purchase has been confirmed."
+                                  : "Enter your card details to purchase this item."}
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            {paymentSuccess ? (
+                              <div className="py-6 text-center space-y-4">
+                                <div className="flex justify-center">
+                                  <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
+                                    <CheckCircle className="h-8 w-8 text-green-600" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-lg">Payment of Rs. {item.price.toLocaleString()} received</p>
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    Contact the seller at <strong>{item.sellerContact}</strong> to arrange pickup.
+                                  </p>
+                                </div>
+                                <Button className="w-full" onClick={() => setPaymentDialogOpen(false)}>
+                                  Done
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                {/* Order Summary */}
+                                <Card className="bg-muted/50">
+                                  <CardContent className="flex items-center gap-3 p-4">
+                                    <div className="relative h-14 w-14 rounded-md overflow-hidden flex-shrink-0">
+                                      <Image src={images[0]} alt={item.title} fill className="object-cover" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-sm truncate">{item.title}</p>
+                                      <p className="text-xs text-muted-foreground">{item.condition} · {item.category}</p>
+                                    </div>
+                                    <span className="font-bold text-[oklch(0.50_0.15_145)] whitespace-nowrap">
+                                      Rs. {item.price.toLocaleString()}
+                                    </span>
+                                  </CardContent>
+                                </Card>
+
+                                <div className="space-y-3">
+                                  {/* Card Number */}
+                                  <div className="space-y-1">
+                                    <Label htmlFor="cardNumber">Card Number</Label>
+                                    <Input
+                                      id="cardNumber"
+                                      placeholder="1234 5678 9012 3456"
+                                      value={cardNumber}
+                                      onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
+                                      maxLength={19}
+                                    />
+                                  </div>
+
+                                  {/* Expiry + CVV */}
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <Label htmlFor="cardExpiry">Expiry (MM/YY)</Label>
+                                      <Input
+                                        id="cardExpiry"
+                                        placeholder="MM/YY"
+                                        value={cardExpiry}
+                                        onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
+                                        maxLength={5}
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label htmlFor="cardCvv">CVV</Label>
+                                      <Input
+                                        id="cardCvv"
+                                        placeholder="123"
+                                        value={cardCvv}
+                                        onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                                        maxLength={4}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Name on Card */}
+                                  <div className="space-y-1">
+                                    <Label htmlFor="cardName">Name on Card</Label>
+                                    <Input
+                                      id="cardName"
+                                      placeholder="Full name as on card"
+                                      value={cardName}
+                                      onChange={(e) => setCardName(e.target.value)}
+                                    />
+                                  </div>
+
+                                  {/* Contact Number */}
+                                  <div className="space-y-1">
+                                    <Label htmlFor="paymentPhone">Contact Number</Label>
+                                    <Input
+                                      id="paymentPhone"
+                                      type="tel"
+                                      placeholder="0771234567"
+                                      value={paymentPhone}
+                                      onChange={(e) => setPaymentPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                      maxLength={10}
+                                    />
+                                    <p className="text-xs text-muted-foreground">Exactly 10 digits</p>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground p-3 bg-muted rounded-lg">
+                                    <Lock className="h-3 w-3 flex-shrink-0" />
+                                    <span>This is a simulated payment for demo purposes. No real charges will be made.</span>
+                                  </div>
+                                </div>
+
+                                <DialogFooter>
+                                  <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    onClick={handlePayment}
+                                    disabled={isPaymentSubmitting}
+                                    className="bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]"
+                                  >
+                                    {isPaymentSubmitting ? <Spinner className="mr-2 h-4 w-4" /> : <CreditCard className="mr-2 h-4 w-4" />}
+                                    Pay Rs. {item.price.toLocaleString()}
+                                  </Button>
+                                </DialogFooter>
+                              </>
+                            )}
+                          </DialogContent>
+                        </Dialog>
+
                         <Dialog open={reserveDialogOpen} onOpenChange={setReserveDialogOpen}>
                           <DialogTrigger asChild>
                             <Button className="flex-1 bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]">

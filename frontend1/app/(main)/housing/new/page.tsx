@@ -30,15 +30,12 @@ const ROOM_TYPES = [
   { value: "full-house", label: "Full House" },
 ]
 
-const CITIES = [
-  "Colombo",
-  "Kandy",
-  "Galle",
-  "Jaffna",
-  "Matara",
-  "Negombo",
-  "Kurunegala",
-  "Ratnapura",
+const CITY       = [
+  "Malabe",
+  "Kaduwela",
+  "Thalahena",
+  "Nugegoda",
+  "Kotte",
 ]
 
 const AMENITIES = [
@@ -180,8 +177,8 @@ export default function NewHousingListingPage() {
       toast.error("Please provide contact phone number")
       return
     }
-    if (!/^[0-9+\-\s()]{7,15}$/.test(formData.contactPhone.trim())) {
-      toast.error("Please enter a valid phone number (digits only, 7–15 characters)")
+    if (!/^[0-9]{10}$/.test(formData.contactPhone.trim())) {
+      toast.error("Please enter a valid 10-digit phone number")
       return
     }
     const priceNum = parseFloat(formData.price)
@@ -401,10 +398,10 @@ export default function NewHousingListingPage() {
                     required
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select city" />
+                      <SelectValue placeholder="Select district" />
                     </SelectTrigger>
                     <SelectContent>
-                      {CITIES.map((city) => (
+                      {CITY.map((city) => (
                         <SelectItem key={city} value={city}>
                           {city}
                         </SelectItem>
@@ -601,10 +598,10 @@ export default function NewHousingListingPage() {
                   placeholder="e.g., 0771234567"
                   value={formData.contactPhone}
                   onChange={handleInputChange}
-                  maxLength={15}
+                  maxLength={10}
                   required
                 />
-                <p className="text-xs text-muted-foreground">Digits only — no letters allowed</p>
+                <p className="text-xs text-muted-foreground">Exactly 10 digits required (e.g., 0771234567)</p>
               </div>
 
               <div className="space-y-2">

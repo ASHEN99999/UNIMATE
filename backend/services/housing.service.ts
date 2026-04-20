@@ -15,6 +15,7 @@ export interface CreateListingDto {
     propertyType: 'boarding' | 'room' | 'annex' | 'apartment';
     roomType: 'single' | 'shared' | 'full-house';
     amenities?: string[];
+    images?: string[];
     contactPhone: string;
     rulesAndRegulations?: string;
     createdBy: string;
@@ -253,14 +254,17 @@ export class HousingService {
             throw new Error('Cannot reserve inactive listing');
         }
 
-        // Check if student already has a pending reservation for this listing
+        // Check if student already has a pending or accepted reservation for this listing
         const existingReservation = await Reservation.findOne({
             listingId,
             studentId,
-            status: 'pending'
+            status: { $in: ['pending', 'accepted'] }
         });
 
         if (existingReservation) {
+            if (existingReservation.status === 'accepted') {
+                throw new Error('You already have an accepted reservation for this listing');
+            }
             throw new Error('You already have a pending reservation for this listing');
         }
 

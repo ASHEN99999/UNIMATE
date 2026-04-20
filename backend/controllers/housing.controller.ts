@@ -16,6 +16,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
             propertyType,
             roomType,
             amenities,
+            images,
             contactPhone,
             rulesAndRegulations
         } = req.body;
@@ -46,6 +47,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
                 propertyType,
                 roomType,
                 amenities,
+                images,
                 contactPhone,
                 rulesAndRegulations,
                 createdBy: req.user?.userId!

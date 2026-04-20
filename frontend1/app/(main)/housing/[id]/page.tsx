@@ -358,6 +358,17 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
 
               {/* Reserve Button */}
               {user?.role === "student" && (
+                myReservation?.status === "accepted" ? (
+                  <div className="w-full rounded-lg bg-green-50 border border-green-200 p-4 text-center">
+                    <p className="text-green-800 font-semibold">✓ Reservation Accepted</p>
+                    <p className="text-green-600 text-sm mt-1">You already have an accepted reservation for this listing.</p>
+                  </div>
+                ) : myReservation?.status === "pending" ? (
+                  <div className="w-full rounded-lg bg-yellow-50 border border-yellow-200 p-4 text-center">
+                    <p className="text-yellow-800 font-semibold">Reservation Pending</p>
+                    <p className="text-yellow-600 text-sm mt-1">Your reservation request is awaiting provider approval.</p>
+                  </div>
+                ) : (
                 <Dialog open={reservationOpen} onOpenChange={setReservationOpen}>
                   <DialogTrigger asChild>
                     <Button className="w-full" size="lg">
@@ -453,6 +464,7 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                )
               )}
 
               {myReservation && (

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/context/auth-context"
+import { CartProvider } from "@/context/cart-context"
 import "./globals.css"
 
 const geist = Geist({
@@ -73,8 +74,10 @@ export default function RootLayout({
         className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <AuthProvider>
-          {children}
-          <Toaster position="top-right" richColors />
+          <CartProvider>
+            {children}
+            <Toaster position="top-right" richColors />
+          </CartProvider>
         </AuthProvider>
         <Analytics />
       </body>

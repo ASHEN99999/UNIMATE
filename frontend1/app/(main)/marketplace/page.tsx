@@ -40,7 +40,10 @@ import {
   Package,
   TrendingUp,
   Tag,
+  ShoppingCart,
 } from "lucide-react"
+import { CartDrawer } from "@/components/cart-drawer"
+import { useCart } from "@/context/cart-context"
 
 const CATEGORIES: ItemCategory[] = [
   "Electronics",
@@ -143,12 +146,15 @@ export default function MarketplacePage() {
             Buy and sell second-hand items within your campus community
           </p>
         </div>
-        <Button asChild className="bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]">
-          <Link href="/marketplace/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Sell Item
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <CartDrawer />
+          <Button asChild className="bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]">
+            <Link href="/marketplace/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Sell Item
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -384,9 +390,12 @@ export default function MarketplacePage() {
 }
 
 function ItemCard({ item, isOwner = false }: { item: SecondHandItem; isOwner?: boolean }) {
+  const { addToCart, removeFromCart, isInCart } = useCart()
+  const inCart = isInCart(item.id)
+
   return (
-    <Link href={`/marketplace/${item.id}`}>
-      <Card className="overflow-hidden transition-all hover:shadow-lg hover:border-[oklch(0.50_0.15_145)]/50 cursor-pointer group h-full flex flex-col">
+    <Card className="overflow-hidden transition-all hover:shadow-lg hover:border-[oklch(0.50_0.15_145)]/50 group h-full flex flex-col">
+      <Link href={`/marketplace/${item.id}`} className="flex-1 flex flex-col">
         <div className="relative aspect-square overflow-hidden bg-muted">
           <Image
             src={item.images[0] || "/placeholder.svg?height=400&width=400"}
@@ -420,15 +429,31 @@ function ItemCard({ item, isOwner = false }: { item: SecondHandItem; isOwner?: b
             </span>
           </div>
         </CardContent>
-        <CardFooter className="flex items-center justify-between border-t pt-4">
-          <span className="text-xl font-bold text-[oklch(0.50_0.15_145)]">
-            Rs. {item.price.toLocaleString()}
-          </span>
-          <Button size="sm" variant="outline">
-            {isOwner ? "Manage" : "View"}
+      </Link>
+      <CardFooter className="flex items-center justify-between border-t pt-4 gap-2">
+        <span className="text-xl font-bold text-[oklch(0.50_0.15_145)]">
+          Rs. {item.price.toLocaleString()}
+        </span>
+        {!isOwner && item.status === "available" ? (
+          <Button
+            size="sm"
+            variant={inCart ? "secondary" : "outline"}
+            onClick={(e) => {
+              e.preventDefault()
+              inCart ? removeFromCart(item.id) : addToCart(item)
+            }}
+          >
+            <ShoppingCart className="mr-1 h-3 w-3" />
+            {inCart ? "Remove" : "Add"}
           </Button>
-        </CardFooter>
-      </Card>
-    </Link>
+        ) : (
+          <Link href={`/marketplace/${item.id}`}>
+            <Button size="sm" variant="outline">
+              {isOwner ? "Manage" : "View"}
+            </Button>
+          </Link>
+        )}
+      </CardFooter>
+    </Card>
   )
 }

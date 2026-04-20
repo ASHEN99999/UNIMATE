@@ -78,6 +78,16 @@ export const secondhandService = {
     const response = await apiClient.put<{ success: boolean; data: any }>(`/secondhand/offers/${offerId}/withdraw`, {});
     return response.data;
   },
+
+  async purchaseItem(itemId: string, data: { buyerName: string; buyerContact: string }): Promise<any> {
+    const response = await apiClient.post<{ success: boolean; data: any; message: string }>(`/secondhand/items/${itemId}/purchase`, data);
+    return response.data;
+  },
+
+  async reserveItem(itemId: string, data: { buyerName: string; buyerContact: string }): Promise<any> {
+    const response = await apiClient.post<{ success: boolean; data: any }>(`/secondhand/items/${itemId}/reserve`, data);
+    return response.data;
+  },
 };
 
 export default secondhandService;
