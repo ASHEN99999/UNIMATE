@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -28,6 +30,7 @@ import {
   Plus,
   Loader2,
   QrCode,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -285,6 +288,37 @@ export default function LaundryPage() {
 
 // My Services Tab - Provider View
 function MyServicesTab({ service, isLoading, onRefresh }: { service: any, isLoading: boolean, onRefresh: () => void }) {
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true)
+      const token = sessionStorage.getItem('unimate_token')
+      const response = await fetch(`http://localhost:5000/api/laundry/providers/${service.id || service._id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success("Service deleted successfully")
+        onRefresh()
+      } else {
+        toast.error(data.message || "Failed to delete service")
+      }
+    } catch (error) {
+      console.error("Delete error:", error)
+      toast.error("Failed to delete service")
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -409,6 +443,30 @@ function MyServicesTab({ service, isLoading, onRefresh }: { service: any, isLoad
               Edit Service
             </Link>
           </Button>
+          <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Service
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Service</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete your laundry service? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardFooter>
       </Card>
     </div>

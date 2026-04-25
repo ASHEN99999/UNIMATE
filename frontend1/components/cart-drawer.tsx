@@ -112,13 +112,13 @@ export function CartDrawer() {
       try {
         if (paymentMethod === "card") {
           await secondhandService.purchaseItem(cartItem.item.id, {
-            buyerName: user.name,
+            buyerName: user.name || "User",
             buyerContact: contactPhone,
           })
         } else {
           // Cash: reserve the item so seller knows buyer is coming
           await secondhandService.reserveItem(cartItem.item.id, {
-            buyerName: user.name,
+            buyerName: user.name || "User",
             buyerContact: contactPhone,
           })
         }

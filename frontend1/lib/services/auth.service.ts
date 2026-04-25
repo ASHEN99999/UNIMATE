@@ -30,42 +30,44 @@ export const authService = {
    * Login user
    */
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>('/auth/login', data);
+    const response = await apiClient.post<{ success: boolean; token: string; user: User }>('/auth/login', data);
     
     // Store token
     if (response.token) {
       apiClient.setToken(response.token);
     }
     
-    return response;
+    return { token: response.token, user: response.user };
   },
 
   /**
    * Register new user
    */
   async register(data: RegisterRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>('/auth/register', data);
+    const response = await apiClient.post<{ success: boolean; token: string; user: User }>('/auth/register', data);
     
     // Store token
     if (response.token) {
       apiClient.setToken(response.token);
     }
     
-    return response;
+    return { token: response.token, user: response.user };
   },
 
   /**
    * Get current user profile
    */
   async getProfile(): Promise<User> {
-    return apiClient.get<User>('/auth/profile');
+    const response = await apiClient.get<{ success: boolean; data: User }>('/auth/me');
+    return response.data;
   },
 
   /**
    * Update user profile
    */
   async updateProfile(data: Partial<User>): Promise<User> {
-    return apiClient.put<User>('/auth/profile', data);
+    const response = await apiClient.put<{ success: boolean; data: User }>('/auth/profile', data);
+    return response.data;
   },
 
   /**
@@ -80,7 +82,7 @@ export const authService = {
    */
   async getPendingProviders(): Promise<User[]> {
     const response = await apiClient.get<{ success: boolean; data: User[] }>('/auth/pending-providers');
-    return response.data;
+    return response.data || [];
   },
 
   /**
@@ -102,14 +104,16 @@ export const authService = {
    * Admin: Get all providers
    */
   async getAllProviders(): Promise<User[]> {
-    return apiClient.get<User[]>('/auth/providers');
+    const response = await apiClient.get<{ success: boolean; data: User[] }>('/auth/providers');
+    return response.data;
   },
 
   /**
    * Admin: Get all users
    */
   async getAllUsers(): Promise<User[]> {
-    return apiClient.get<User[]>('/auth/users');
+    const response = await apiClient.get<{ success: boolean; data: User[] }>('/auth/users');
+    return response.data;
   },
 };
 

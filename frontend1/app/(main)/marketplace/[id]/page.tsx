@@ -196,13 +196,14 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
     try {
       setIsPaymentSubmitting(true)
       await secondhandService.purchaseItem(id, {
-        buyerName: user.name,
+        buyerName: user.name || "User",
         buyerContact: paymentPhone,
       })
       setPaymentSuccess(true)
       setItem((prev) => prev ? { ...prev, status: "sold" } : prev)
     } catch (err: any) {
-      toast.error(err.message || "Payment failed. Please try again.")
+      console.error("Purchase error:", err)
+      toast.error(err.message || err.error || "Payment failed. Please try again.")
     } finally {
       setIsPaymentSubmitting(false)
     }

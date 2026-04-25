@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/context/auth-context"
+import { authService } from "@/lib/services/auth.service"
+import { housingService } from "@/lib/services/housing.service"
 import {
   Home,
   Shirt,
@@ -19,7 +21,9 @@ import {
   Package,
   Users,
   TrendingUp,
+  Loader2,
 } from "lucide-react"
+import { useState, useEffect } from "react"
 
 // Quick actions based on role
 const studentActions = [
@@ -50,37 +54,10 @@ const laundryProviderActions = [
 
 const adminActions = [
   { label: "Pending Providers", href: "/admin/providers", icon: Users, color: "bg-[oklch(0.55_0.16_280)]" },
+  { label: "All Providers", href: "/admin/all-providers", icon: Users, color: "bg-[oklch(0.55_0.18_195)]" },
   { label: "Pending Listings", href: "/admin/listings", icon: Home, color: "bg-[oklch(0.55_0.18_195)]" },
   { label: "All Users", href: "/admin/users", icon: Users, color: "bg-primary" },
   { label: "Statistics", href: "/admin/stats", icon: TrendingUp, color: "bg-[oklch(0.50_0.15_145)]" },
-]
-
-// Mock recent activity
-const recentActivity = [
-  {
-    id: 1,
-    type: "reservation",
-    title: "Housing Reservation",
-    description: "Your reservation for 'Comfortable Single Room' is pending approval",
-    status: "pending",
-    date: "2 hours ago",
-  },
-  {
-    id: 2,
-    type: "booking",
-    title: "Laundry Booking",
-    description: "Order #LND-00123 - Status: Requested",
-    status: "processing",
-    date: "Yesterday",
-  },
-  {
-    id: 3,
-    type: "listing",
-    title: "Marketplace Item",
-    description: "Your iPhone 13 listing received 5 new views",
-    status: "active",
-    date: "2 days ago",
-  },
 ]
 
 const statusStyles = {
@@ -93,6 +70,122 @@ const statusStyles = {
 export default function DashboardPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    pendingProviders: 0,
+    activeListings: 0,
+    pendingListings: 0,
+    totalProviders: 0,
+    totalStudents: 0,
+    monthlyTransactions: 0,
+    userStats: {
+      activeBookings: 0,
+      pendingBookings: 0,
+      myListings: 0,
+      savedItems: 0,
+    }
+  })
+  const [statsLoading, setStatsLoading] = useState(true)
+
+  useEffect(() => {
+    if (user?.role === "admin") {
+      fetchAdminStats()
+    } else if (user) {
+      fetchUserStats()
+    }
+  }, [user])
+
+  const fetchAdminStats = async () => {
+    try {
+      setStatsLoading(true)
+      const users = await authService.getAllUsers()
+      const providers = await authService.getAllProviders()
+      const pendingProviders = await authService.getPendingProviders()
+      
+      const token = sessionStorage.getItem('unimate_token')
+      const activeListingsResponse = await fetch(`http://localhost:5000/api/housing?status=active`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const pendingListingsResponse = await fetch(`http://localhost:5000/api/housing?status=pending_approval`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      
+      // Fetch paid transactions from food requests (laundry endpoint doesn't support admin filtering)
+      const foodRequestsResponse = await fetch(`http://localhost:5000/api/food-assistance/requests?paymentStatus=paid`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      
+      const activeListingsData = await activeListingsResponse.json()
+      const pendingListingsData = await pendingListingsResponse.json()
+      const foodRequestsData = await foodRequestsResponse.json()
+      
+      // Calculate total transactions from paid requests
+      let totalTransactions = 0
+      if (foodRequestsData.success && foodRequestsData.data) {
+        foodRequestsData.data.forEach((request: any) => {
+          if (request.estimatedCost) {
+            totalTransactions += request.estimatedCost
+          }
+        })
+      }
+      
+      setStats({
+        totalUsers: users.length,
+        pendingProviders: pendingProviders.length,
+        activeListings: activeListingsData.success ? activeListingsData.data.length : 0,
+        pendingListings: pendingListingsData.success ? pendingListingsData.data.length : 0,
+        totalProviders: providers.length,
+        totalStudents: users.filter(u => u.role === 'student').length,
+        monthlyTransactions: totalTransactions,
+        userStats: stats.userStats
+      })
+    } catch (error) {
+      console.error("Failed to fetch stats", error)
+    } finally {
+      setStatsLoading(false)
+    }
+  }
+
+  const fetchUserStats = async () => {
+    if (!user) return
+    
+    try {
+      setStatsLoading(true)
+      
+      if (user.role === "student") {
+        // Fetch student-specific stats
+        const myReservations = await housingService.getMyReservations()
+        const pendingCount = myReservations.filter(r => r.status === 'pending').length
+        
+        setStats(prev => ({
+          ...prev,
+          userStats: {
+            activeBookings: myReservations.length,
+            pendingBookings: pendingCount,
+            myListings: 0,
+            savedItems: 0,
+          }
+        }))
+      } else if (user.role === "provider") {
+        // Fetch provider-specific stats
+        const myListings = await housingService.getMyListings()
+        
+        setStats(prev => ({
+          ...prev,
+          userStats: {
+            activeBookings: 0,
+            pendingBookings: 0,
+            myListings: myListings.length,
+            savedItems: 0,
+          }
+        }))
+      }
+    } catch (error) {
+      console.error("Failed to fetch user stats", error)
+    } finally {
+      setStatsLoading(false)
+    }
+  }
 
   // No need to check auth here - layout already handles it
 
@@ -129,7 +222,7 @@ export default function DashboardPage() {
       {/* Welcome Section */}
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">
-          Welcome back, {user.name.split(" ")[0]}!
+          Welcome back, {user.name ? user.name.split(" ")[0] : "User"}!
         </h1>
         <p className="text-muted-foreground">
           {user.role === "admin"
@@ -185,133 +278,119 @@ export default function DashboardPage() {
       {/* Stats Cards (Student/Provider) */}
       {user.role !== "admin" && (
         <div className="grid md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Bookings</CardTitle>
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">3</div>
-              <p className="text-xs text-muted-foreground">1 pending approval</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {user.role === "provider" ? "Active Listings" : "Saved Items"}
-              </CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{user.role === "provider" ? "5" : "8"}</div>
-              <p className="text-xs text-muted-foreground">
-                {user.role === "provider" ? "2 housing, 1 laundry" : "In your watchlist"}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Month</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {user.role === "provider" ? "Rs. 45,000" : "Rs. 12,500"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {user.role === "provider" ? "Total earnings" : "Total spent"}
-              </p>
-            </CardContent>
-          </Card>
+          {statsLoading ? (
+            <Card className="col-span-3">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Active Bookings</CardTitle>
+                  <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.userStats.activeBookings}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.userStats.pendingBookings > 0 ? `${stats.userStats.pendingBookings} pending approval` : "All confirmed"}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {user.role === "provider" ? "Active Listings" : "Saved Items"}
+                  </CardTitle>
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {user.role === "provider" ? stats.userStats.myListings : stats.userStats.savedItems}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {user.role === "provider" ? "Your published listings" : "In your watchlist"}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">This Month</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">Rs. 0</div>
+                  <p className="text-xs text-muted-foreground">
+                    {user.role === "provider" ? "Total earnings" : "Total spent"}
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       )}
 
       {/* Admin Stats */}
       {user.role === "admin" && (
         <div className="grid md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">1,234</div>
-              <p className="text-xs text-muted-foreground">+23 this week</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Providers</CardTitle>
-              <Clock className="h-4 w-4 text-amber-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">5</div>
-              <p className="text-xs text-muted-foreground">Awaiting approval</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Listings</CardTitle>
-              <Home className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">156</div>
-              <p className="text-xs text-muted-foreground">12 pending review</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">Rs. 2.4M</div>
-              <p className="text-xs text-muted-foreground">This month</p>
-            </CardContent>
-          </Card>
+          {statsLoading ? (
+            <Card className="col-span-4">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.totalUsers}</div>
+                  <p className="text-xs text-muted-foreground">{stats.totalStudents} students, {stats.totalProviders} providers</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Pending Providers</CardTitle>
+                  <Clock className="h-4 w-4 text-amber-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.pendingProviders}</div>
+                  <p className="text-xs text-muted-foreground">Awaiting approval</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Active Listings</CardTitle>
+                  <Home className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.activeListings}</div>
+                  <p className="text-xs text-muted-foreground">{stats.pendingListings} pending review</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Transactions</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">Rs. {stats.monthlyTransactions.toLocaleString()}</div>
+                  <p className="text-xs text-muted-foreground">Total from paid bookings</p>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       )}
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Your latest updates and notifications</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {recentActivity.map((activity) => {
-              const statusStyle = statusStyles[activity.status as keyof typeof statusStyles]
-              const StatusIcon = statusStyle.icon
-              return (
-                <div
-                  key={activity.id}
-                  className="flex items-start gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors"
-                >
-                  <div className={`p-2 rounded-lg ${statusStyle.bg}`}>
-                    <StatusIcon className={`h-4 w-4 ${statusStyle.color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{activity.title}</p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {activity.description}
-                    </p>
-                  </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {activity.date}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-          <Button variant="ghost" className="w-full mt-4" asChild>
-            <Link href="/activity">
-              View All Activity
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   )
 }

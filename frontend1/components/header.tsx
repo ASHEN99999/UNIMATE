@@ -28,7 +28,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const navLinks = [
+const allNavLinks = [
   { href: "/housing", label: "Housing", icon: Home },
   { href: "/laundry", label: "Laundry", icon: Shirt },
   { href: "/food", label: "Food Help", icon: Utensils },
@@ -39,6 +39,29 @@ export function Header() {
   const pathname = usePathname()
   const { user, isAuthenticated, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Filter navigation links based on user role
+  const navLinks = (() => {
+    if (!user) return allNavLinks
+    
+    // Students and admins see all services
+    if (user.role === "student" || user.role === "admin") {
+      return allNavLinks
+    }
+    
+    // Providers only see their specific service
+    if (user.role === "provider") {
+      if (user.providerType === "housing") {
+        return allNavLinks.filter(link => link.href === "/housing")
+      } else if (user.providerType === "laundry") {
+        return allNavLinks.filter(link => link.href === "/laundry")
+      }
+      // Fallback for providers without specific type - show all
+      return allNavLinks
+    }
+    
+    return allNavLinks
+  })()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -82,7 +105,7 @@ export function Header() {
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                   <Avatar className="h-9 w-9">
                     <AvatarFallback className="bg-primary text-primary-foreground">
-                      {user.name.split(" ").map(n => n[0]).join("").toUpperCase()}
+                      {user.name ? user.name.split(" ").map(n => n[0]).join("").toUpperCase() : "U"}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
@@ -90,12 +113,12 @@ export function Header() {
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user.name}</p>
+                    <p className="text-sm font-medium leading-none">{user.name || "User"}</p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {user.universityEmail}
+                      {user.universityEmail || ""}
                     </p>
                     <p className="text-xs leading-none text-muted-foreground capitalize">
-                      {user.role}
+                      {user.role || ""}
                     </p>
                   </div>
                 </DropdownMenuLabel>

@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/sheet"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
-import { mockSecondHandItems } from "@/lib/mock-data"
 import { useAuth } from "@/context/auth-context"
 import type { SecondHandItem, ItemCategory, ItemCondition, MarketplaceFilters } from "@/lib/types"
 import {
@@ -81,9 +80,9 @@ export default function MarketplacePage() {
   const [items, setItems] = useState<SecondHandItem[]>([])
 
   useEffect(() => {
-    // Load items from localStorage + mock data
+    // Load items from localStorage
     const stored = JSON.parse(localStorage.getItem("unimate_marketplace_items") || "[]")
-    setItems([...stored, ...mockSecondHandItems])
+    setItems(stored)
   }, [])
 
   const filteredItems = useMemo(() => {
