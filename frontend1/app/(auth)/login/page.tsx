@@ -23,10 +23,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [emailError, setEmailError] = useState("")
 
-  // Validate university email format (IT22267818@my.sliit.lk)
+  // Validate university email format (it22267818@my.sliit.lk)
   const validateUniversityEmail = (email: string): boolean => {
-    // University email pattern: alphanumeric@my.sliit.lk or alphanumeric@sliit.lk
-    const universityPattern = /^[A-Za-z0-9]+@(my\.)?sliit\.lk$/
+    // University email pattern: it + 8 digits + @my.sliit.lk (case insensitive)
+    const universityPattern = /^it\d{8}@my\.sliit\.lk$/i
     return universityPattern.test(email)
   }
 
@@ -66,7 +66,7 @@ export default function LoginPage() {
     if (value) {
       if (loginType === "university") {
         if (!validateUniversityEmail(value)) {
-          setEmailError("Please enter a valid university email (e.g., IT22267818@my.sliit.lk)")
+          setEmailError("Please enter a valid university email (e.g., it22267818@my.sliit.lk)")
         }
       } else {
         if (!validateProviderEmail(value)) {
@@ -87,7 +87,7 @@ export default function LoginPage() {
     // Validate email format before submitting
     if (loginType === "university") {
       if (!validateUniversityEmail(email)) {
-        toast.error("Please enter a valid university email (e.g., IT22267818@my.sliit.lk)")
+        toast.error("Please enter a valid university email (e.g., it22267818@my.sliit.lk)")
         return
       }
     } else {
@@ -166,7 +166,7 @@ export default function LoginPage() {
                   type="email"
                   placeholder={
                     loginType === "university" 
-                      ? "IT22267818@my.sliit.lk" 
+                      ? "it22267818@my.sliit.lk" 
                       : "provider@gmail.com"
                   }
                   value={email}
@@ -251,11 +251,11 @@ export default function LoginPage() {
                   <>
                     <p>
                       <span className="text-muted-foreground">Student:</span>{" "}
-                      IT22267818@my.sliit.lk / password123
+                      it22267818@my.sliit.lk / password123
                     </p>
                     <p>
                       <span className="text-muted-foreground">Food Dealer:</span>{" "}
-                      IT22345678@my.sliit.lk / password123
+                      it22345678@my.sliit.lk / password123
                     </p>
                     <p>
                       <span className="text-muted-foreground">Admin:</span>{" "}
