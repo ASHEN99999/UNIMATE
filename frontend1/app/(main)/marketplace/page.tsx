@@ -23,6 +23,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/context/auth-context"
@@ -40,6 +46,10 @@ import {
   TrendingUp,
   Tag,
   ShoppingCart,
+  ChevronLeft,
+  ChevronRight,
+  ZoomIn,
+  XCircle,
 } from "lucide-react"
 import { CartDrawer } from "@/components/cart-drawer"
 import { useCart } from "@/context/cart-context"
@@ -391,25 +401,108 @@ export default function MarketplacePage() {
 function ItemCard({ item, isOwner = false }: { item: SecondHandItem; isOwner?: boolean }) {
   const { addToCart, removeFromCart, isInCart } = useCart()
   const inCart = isInCart(item.id)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+
+  const handleImageClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCurrentImageIndex(0)
+    setPreviewOpen(true)
+  }
+
+  const nextImage = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCurrentImageIndex((prev) => (prev + 1) % item.images.length)
+  }
+
+  const prevImage = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCurrentImageIndex((prev) => (prev - 1 + item.images.length) % item.images.length)
+  }
 
   return (
-    <Card className="overflow-hidden transition-all hover:shadow-lg hover:border-[oklch(0.50_0.15_145)]/50 group h-full flex flex-col">
-      <Link href={`/marketplace/${item.id}`} className="flex-1 flex flex-col">
-        <div className="relative aspect-square overflow-hidden bg-muted">
-          <Image
-            src={item.images[0] || "/placeholder.svg?height=400&width=400"}
-            alt={item.title}
-            fill
-            className="object-cover transition-transform group-hover:scale-105"
-          />
-          <Badge className="absolute top-3 left-3">{item.category}</Badge>
-          <Badge
-            variant="outline"
-            className={`absolute top-3 right-3 ${statusColors[item.status]}`}
-          >
-            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-          </Badge>
-        </div>
+    <>
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{item.title}</DialogTitle>
+          </DialogHeader>
+          <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+            <Image
+              src={item.images[currentImageIndex] || "/placeholder.svg?height=600&width=800"}
+              alt={`${item.title} - Image ${currentImageIndex + 1}`}
+              fill
+              className="object-contain"
+            />
+            {item.images.length > 1 && (
+              <>
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  className="absolute left-2 top-1/2 -translate-y-1/2"
+                  onClick={prevImage}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  className="absolute right-2 top-1/2 -translate-y-1/2"
+                  onClick={nextImage}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+              {item.images.map((_, idx) => (
+                <button
+                  key={idx}
+                  className={`w-2 h-2 rounded-full ${
+                    idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                  }`}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setCurrentImageIndex(idx)
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span>Image {currentImageIndex + 1} of {item.images.length}</span>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Card className="overflow-hidden transition-all hover:shadow-lg hover:border-[oklch(0.50_0.15_145)]/50 group h-full flex flex-col">
+        <Link href={`/marketplace/${item.id}`} className="flex-1 flex flex-col">
+          <div className="relative aspect-square overflow-hidden bg-muted cursor-pointer" onClick={handleImageClick}>
+            <Image
+              src={item.images[0] || "/placeholder.svg?height=400&width=400"}
+              alt={item.title}
+              fill
+              className="object-cover transition-transform group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+              <ZoomIn className="h-8 w-8 text-white" />
+            </div>
+            <Badge className="absolute top-3 left-3">{item.category}</Badge>
+            <Badge
+              variant="outline"
+              className={`absolute top-3 right-3 ${statusColors[item.status]}`}
+            >
+              {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+            </Badge>
+            {item.images.length > 1 && (
+              <Badge variant="secondary" className="absolute bottom-3 left-3">
+                {item.images.length} photos
+              </Badge>
+            )}
+          </div>
         <CardHeader className="pb-2">
           <CardTitle className="line-clamp-1 text-base">{item.title}</CardTitle>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -454,5 +547,6 @@ function ItemCard({ item, isOwner = false }: { item: SecondHandItem; isOwner?: b
         )}
       </CardFooter>
     </Card>
+    </>
   )
 }

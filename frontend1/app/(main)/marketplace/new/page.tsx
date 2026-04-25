@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +19,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { useAuth } from "@/context/auth-context"
 import type { ItemCategory, ItemCondition, SecondHandItem } from "@/lib/types"
-import { ArrowLeft, Upload, X } from "lucide-react"
+import { ArrowLeft, Upload, X, Plus } from "lucide-react"
 import { toast } from "sonner"
 
 const CATEGORIES: ItemCategory[] = [
@@ -42,6 +43,7 @@ const CONDITIONS: { value: ItemCondition; label: string; description: string }[]
 export default function SellItemPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
@@ -50,7 +52,60 @@ export default function SellItemPage() {
   const [price, setPrice] = useState("")
   const [location, setLocation] = useState("")
   const [contactPhone, setContactPhone] = useState(user?.contactPhone || "")
+  const [images, setImages] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files) {
+      processFiles(Array.from(files))
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files)
+    processFiles(files)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const processFiles = (files: File[]) => {
+    const imageFiles = files.filter(file => file.type.startsWith('image/'))
+    
+    if (imageFiles.length === 0) {
+      toast.error("Please select image files only")
+      return
+    }
+
+    if (images.length + imageFiles.length > 5) {
+      toast.error("Maximum 5 images allowed")
+      return
+    }
+
+    imageFiles.forEach(file => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const base64 = reader.result as string
+        setImages(prev => [...prev, base64])
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -92,7 +147,7 @@ export default function SellItemPage() {
       category: category as ItemCategory,
       condition: condition as ItemCondition,
       price: parseInt(price),
-      images: ["/placeholder.svg?height=400&width=400"],
+      images: images.length > 0 ? images : ["/placeholder.svg?height=400&width=400"],
       sellerId: user.id,
       sellerName: user.name,
       sellerContact: contactPhone,
@@ -246,18 +301,71 @@ export default function SellItemPage() {
               <p className="text-xs text-muted-foreground">Digits only — no letters allowed</p>
             </div>
 
-            {/* Image Upload Placeholder */}
+            {/* Image Upload */}
             <div className="space-y-2">
               <Label>Photos</Label>
-              <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                <Upload className="mx-auto h-10 w-10 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Drag and drop images or click to upload
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  (Image upload will be available with storage integration)
-                </p>
-              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              
+              {images.length > 0 && (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                  {images.map((image, index) => (
+                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden border">
+                      <Image
+                        src={image}
+                        alt={`Preview ${index + 1}`}
+                        fill
+                        className="object-cover"
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="destructive"
+                        className="absolute top-1 right-1 h-6 w-6"
+                        onClick={() => removeImage(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  {images.length < 5 && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="aspect-square rounded-lg border-2 border-dashed flex flex-col items-center justify-center hover:bg-muted/50 transition-colors"
+                    >
+                      <Plus className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground mt-1">Add More</span>
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              {images.length === 0 && (
+                <div
+                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                    isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
+                  }`}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="mx-auto h-10 w-10 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Drag and drop images or click to upload
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Maximum 5 images (PNG, JPG, GIF)
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Actions */}
