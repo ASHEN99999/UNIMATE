@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,7 +30,7 @@ import {
 import { Slider } from "@/components/ui/slider"
 import { housingService } from "@/lib/services/housing.service"
 import { toast } from "sonner"
-import type { HousingListing, HousingFilters, PropertyType, HousingReservation } from "@/lib/types"
+import type { HousingListing, HousingFilters, PropertyType, HousingReservation, ListingStatus } from "@/lib/types"
 import {
   Home,
   MapPin,
@@ -416,6 +417,7 @@ export default function HousingPage() {
 
 function HousingCard({ listing }: { listing: HousingListing }) {
   const { user } = useAuth()
+  const router = useRouter()
   // Backend returns createdBy field (can be ObjectId string or populated object)
   const listingOwnerId = typeof (listing as any).createdBy === 'string' 
     ? (listing as any).createdBy 
@@ -424,6 +426,42 @@ function HousingCard({ listing }: { listing: HousingListing }) {
   
   // Handle both id and _id from backend
   const listingId = listing.id || (listing as any)._id
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!confirm("Are you sure you want to delete this listing? This action cannot be undone.")) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      const token = sessionStorage.getItem('unimate_token')
+      const response = await fetch(`http://localhost:5000/api/housing/${listingId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success("Listing deleted successfully")
+        // Refresh the listings
+        window.location.reload()
+      } else {
+        toast.error(data.message || "Failed to delete listing")
+      }
+    } catch (error) {
+      console.error("Delete error:", error)
+      toast.error("Failed to delete listing")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
   
   const getStatusVariant = (status: ListingStatus): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
@@ -493,7 +531,33 @@ function HousingCard({ listing }: { listing: HousingListing }) {
             </span>
             <span className="text-sm text-muted-foreground">/month</span>
           </div>
-          <Button size="sm">View Details</Button>
+          <div className="flex gap-2">
+            {isOwnListing && (
+              <>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    router.push(`/housing/${listingId}/edit`)
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="destructive"
+                  onClick={handleDelete}   
+                  disabled={isDeleting}
+                  className="bg-red-500"
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              </>
+            )}
+            <Button size="sm">View Details</Button>
+          </div>
         </CardFooter>
       </Card>
     </Link>

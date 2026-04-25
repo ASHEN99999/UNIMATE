@@ -49,7 +49,7 @@ export const housingService = {
   },
 
   async getMyListings(): Promise<HousingListing[]> {
-    const response = await apiClient.get<{ success: boolean; data: HousingListing[] }>('/housing/my-listings');
+    const response = await apiClient.get<{ success: boolean; data: HousingListing[] }>('/housing/provider/dashboard');
     return response.data;
   },
 
@@ -59,15 +59,15 @@ export const housingService = {
   },
 
   async updateListing(id: string, data: UpdateListingRequest): Promise<HousingListing> {
-    return apiClient.put<HousingListing>(`/housing/listings/${id}`, data);
+    return apiClient.put<HousingListing>(`/housing/${id}`, data);
   },
 
   async deleteListing(id: string): Promise<void> {
-    return apiClient.delete(`/housing/listings/${id}`);
+    return apiClient.delete(`/housing/${id}`);
   },
 
   async updateListingStatus(id: string, status: ListingStatus): Promise<HousingListing> {
-    return apiClient.patch<HousingListing>(`/housing/listings/${id}/status`, { status });
+    return apiClient.put<HousingListing>(`/housing/${id}/toggle-status`, { status });
   },
 
   // Reservations
