@@ -23,12 +23,24 @@ export default function RegisterPage() {
   const [role, setRole] = useState<UserRole>("student")
   const [providerType, setProviderType] = useState<ProviderType>("housing")
   const [showPassword, setShowPassword] = useState(false)
+  const [emailError, setEmailError] = useState("")
+
+  // Validate university email format (it22267818@my.sliit.lk)
+  const validateUniversityEmail = (email: string): boolean => {
+    const universityPattern = /^it\d{8}@my\.sliit\.lk$/i
+    return universityPattern.test(email)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!name || !email || !password || !confirmPassword) {
       toast.error("Please fill in all fields")
+      return
+    }
+
+    if (role === "student" && !validateUniversityEmail(email)) {
+      toast.error("Please enter a valid university email (e.g., it22267818@my.sliit.lk)")
       return
     }
 
@@ -104,12 +116,25 @@ export default function RegisterPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder={role === "student" ? "your.name@university.lk" : "your.email@example.com"}
+                  placeholder={role === "student" ? "it22267818@my.sliit.lk" : "your.email@example.com"}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    setEmailError("")
+                    if (role === "student" && e.target.value && !validateUniversityEmail(e.target.value)) {
+                      setEmailError("Please enter a valid university email (e.g., it22267818@my.sliit.lk)")
+                    }
+                  }}
                   disabled={isLoading}
                   required
+                  className={emailError ? "border-red-500" : ""}
                 />
+                {emailError && (
+                  <p className="text-xs text-red-500 mt-1">{emailError}</p>
+                )}
+                {role === "student" && !emailError && email && validateUniversityEmail(email) && (
+                  <p className="text-xs text-green-600 mt-1">✓ Valid university email format</p>
+                )}
               </div>
 
               <div className="space-y-2">
