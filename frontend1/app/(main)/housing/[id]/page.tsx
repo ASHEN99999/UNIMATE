@@ -50,6 +50,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
+  Trash2,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -78,6 +79,8 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [myReservation, setMyReservation] = useState<import("@/lib/types").HousingReservation | null>(null)
   const [isPdfDownloading, setIsPdfDownloading] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -189,6 +192,34 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
       toast.error(error instanceof Error ? error.message : "Failed to create reservation")
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true)
+      const token = sessionStorage.getItem('unimate_token')
+      const response = await fetch(`http://localhost:5000/api/housing/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success("Listing deleted successfully")
+        router.push("/housing")
+      } else {
+        toast.error(data.message || "Failed to delete listing")
+      }
+    } catch (error) {
+      console.error("Delete error:", error)
+      toast.error("Failed to delete listing")
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
     }
   }
 
@@ -487,9 +518,35 @@ export default function HousingDetailPage({ params }: { params: Promise<{ id: st
               )}
 
               {user?.role === "provider" && user.id === listing.providerId && (
-                <Button className="w-full" variant="outline" asChild>
-                  <Link href={`/housing/${listing.id}/edit`}>Edit Listing</Link>
-                </Button>
+                <div className="space-y-2">
+                  <Button className="w-full" variant="outline" asChild>
+                    <Link href={`/housing/${listing.id}/edit`}>Edit Listing</Link>
+                  </Button>
+                  <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="w-full" variant="destructive">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete Listing
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Delete Listing</DialogTitle>
+                        <DialogDescription>
+                          Are you sure you want to delete this listing? This action cannot be undone.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               )}
             </CardContent>
           </Card>
