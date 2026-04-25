@@ -200,6 +200,22 @@ export interface SecondHandItem {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  acceptsBids?: boolean
+}
+
+export type BidStatus = "pending" | "accepted" | "rejected" | "withdrawn"
+
+export interface ItemBid {
+  id: string
+  itemId: string
+  bidderId: string
+  bidderName: string
+  bidderContact: string
+  amount: number
+  message?: string
+  status: BidStatus
+  createdAt: string
+  updatedAt: string
 }
 
 // API Response Types

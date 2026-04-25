@@ -24,7 +24,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { mockSecondHandItems } from "@/lib/mock-data"
 import { useAuth } from "@/context/auth-context"
 import { cn } from "@/lib/utils"
-import type { SecondHandItem } from "@/lib/types"
+import type { SecondHandItem, ItemBid } from "@/lib/types"
 import { secondhandService } from "@/lib/services/secondhand.service"
 import { useCart } from "@/context/cart-context"
 import {
@@ -86,6 +86,7 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
   const [offerPrice, setOfferPrice] = useState("")
   const [offerMessage, setOfferMessage] = useState("")
   const [isOfferSubmitting, setIsOfferSubmitting] = useState(false)
+  const [bids, setBids] = useState<ItemBid[]>([])
 
   // Payment state
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
@@ -114,6 +115,11 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
         localStorage.setItem("unimate_marketplace_items", JSON.stringify(stored))
       }
     }
+
+    // Load bids for this item
+    const allBids = JSON.parse(localStorage.getItem("unimate_marketplace_bids") || "[]")
+    const itemBids = allBids.filter((bid: ItemBid) => bid.itemId === id)
+    setBids(itemBids)
   }, [id])
 
   if (!item) {
@@ -149,24 +155,53 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
       toast.error("Phone number must be 7–15 digits — no letters allowed")
       return
     }
-    try {
-      setIsOfferSubmitting(true)
-      await secondhandService.createOffer(id, {
-        offerPrice: price,
-        message: offerMessage,
-        buyerName: user.name,
-        buyerContact: contactPhone || user.contactPhone || "N/A",
-      })
-      setOfferDialogOpen(false)
-      setOfferPrice("")
-      setOfferMessage("")
-      toast.success("Offer submitted!", {
-        description: "The seller will review your offer and respond shortly.",
-      })
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit offer")
-    } finally {
-      setIsOfferSubmitting(false)
+
+    setIsOfferSubmitting(true)
+
+    const newBid: ItemBid = {
+      id: `bid_${Date.now()}`,
+      itemId: item.id,
+      bidderId: user.id,
+      bidderName: user.name,
+      bidderContact: contactPhone || user.contactPhone || "",
+      amount: price,
+      message: offerMessage,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    // Store bid in localStorage
+    const allBids = JSON.parse(localStorage.getItem("unimate_marketplace_bids") || "[]")
+    allBids.push(newBid)
+    localStorage.setItem("unimate_marketplace_bids", JSON.stringify(allBids))
+
+    setBids([...bids, newBid])
+    setIsOfferSubmitting(false)
+    setOfferDialogOpen(false)
+    setOfferPrice("")
+    setOfferMessage("")
+    toast.success("Offer submitted successfully!", {
+      description: `Your offer of Rs. ${price.toLocaleString()} has been sent to the seller.`,
+    })
+  }
+
+  const handleBidResponse = (bidId: string, action: 'accept' | 'reject') => {
+    const allBids = JSON.parse(localStorage.getItem("unimate_marketplace_bids") || "[]")
+    const bidIndex = allBids.findIndex((bid: ItemBid) => bid.id === bidId)
+    
+    if (bidIndex !== -1) {
+      allBids[bidIndex].status = action === 'accept' ? 'accepted' : 'rejected'
+      allBids[bidIndex].updatedAt = new Date().toISOString()
+      localStorage.setItem("unimate_marketplace_bids", JSON.stringify(allBids))
+      
+      setBids(allBids.filter((bid: ItemBid) => bid.itemId === item.id))
+      
+      if (action === 'accept') {
+        toast.success("Bid accepted! The buyer will be notified.")
+      } else {
+        toast.success("Bid rejected.")
+      }
     }
   }
 
@@ -739,13 +774,75 @@ export default function MarketplaceDetailPage({ params }: { params: Promise<{ id
                   </Button>
                 )}
 
-                <Button variant="outline">
-                  <Phone className="mr-2 h-4 w-4" />
-                  Contact Seller
-                </Button>
+                {!isOwner && (
+                  <Button variant="outline">
+                    <Phone className="mr-2 h-4 w-4" />
+                    Contact Seller
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
+
+          {/* Bids Section for Sellers */}
+          {isOwner && bids.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Received Offers</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {bids.map((bid) => (
+                  <div key={bid.id} className="p-4 border rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">Rs. {bid.amount.toLocaleString()}</p>
+                        <p className="text-sm text-muted-foreground">
+                          From {bid.bidderName} ({bid.bidderContact})
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          bid.status === "accepted"
+                            ? "default"
+                            : bid.status === "rejected"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                      >
+                        {bid.status}
+                      </Badge>
+                    </div>
+                    {bid.message && (
+                      <p className="text-sm text-muted-foreground">"{bid.message}"</p>
+                    )}
+                    {bid.status === "pending" && (
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleBidResponse(bid.id, "accept")}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleBidResponse(bid.id, "reject")}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {bids.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No offers received yet
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

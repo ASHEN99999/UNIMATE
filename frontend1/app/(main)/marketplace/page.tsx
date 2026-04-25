@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
@@ -32,7 +33,8 @@ import {
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/context/auth-context"
-import type { SecondHandItem, ItemCategory, ItemCondition, MarketplaceFilters } from "@/lib/types"
+import type { SecondHandItem, ItemCategory, ItemCondition, MarketplaceFilters, ItemBid } from "@/lib/types"
+import { toast } from "sonner"
 import {
   ShoppingBag,
   Search,
@@ -50,6 +52,7 @@ import {
   ChevronRight,
   ZoomIn,
   XCircle,
+  DollarSign,
 } from "lucide-react"
 import { CartDrawer } from "@/components/cart-drawer"
 import { useCart } from "@/context/cart-context"
@@ -301,7 +304,11 @@ export default function MarketplacePage() {
           {filteredItems.length > 0 ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredItems.map((item) => (
-                <ItemCard key={item.id} item={item} />
+                <ItemCard 
+                  key={item.id} 
+                  item={item} 
+                  isOwner={item.sellerId === user?.id}
+                />
               ))}
             </div>
           ) : (
@@ -400,9 +407,14 @@ export default function MarketplacePage() {
 
 function ItemCard({ item, isOwner = false }: { item: SecondHandItem; isOwner?: boolean }) {
   const { addToCart, removeFromCart, isInCart } = useCart()
+  const { user } = useAuth()
   const inCart = isInCart(item.id)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [bidOpen, setBidOpen] = useState(false)
+  const [bidAmount, setBidAmount] = useState("")
+  const [bidMessage, setBidMessage] = useState("")
+  const [isSubmittingBid, setIsSubmittingBid] = useState(false)
 
   const handleImageClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -421,6 +433,54 @@ function ItemCard({ item, isOwner = false }: { item: SecondHandItem; isOwner?: b
     e.preventDefault()
     e.stopPropagation()
     setCurrentImageIndex((prev) => (prev - 1 + item.images.length) % item.images.length)
+  }
+
+  const handleSubmitBid = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!user) {
+      toast.error("Please log in to place a bid")
+      return
+    }
+
+    const amount = parseInt(bidAmount)
+    if (isNaN(amount) || amount < 1) {
+      toast.error("Please enter a valid bid amount")
+      return
+    }
+
+    if (amount >= item.price) {
+      toast.error("Bid must be lower than the listed price")
+      return
+    }
+
+    setIsSubmittingBid(true)
+
+    const newBid: ItemBid = {
+      id: `bid_${Date.now()}`,
+      itemId: item.id,
+      bidderId: user.id,
+      bidderName: user.name,
+      bidderContact: user.contactPhone || "",
+      amount,
+      message: bidMessage,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    // Store bids in localStorage
+    const bids = JSON.parse(localStorage.getItem("unimate_marketplace_bids") || "[]")
+    bids.push(newBid)
+    localStorage.setItem("unimate_marketplace_bids", JSON.stringify(bids))
+
+    setIsSubmittingBid(false)
+    setBidOpen(false)
+    setBidAmount("")
+    setBidMessage("")
+    toast.success("Bid submitted successfully!", {
+      description: `Your offer of Rs. ${amount.toLocaleString()} has been sent to the seller.`,
+    })
   }
 
   return (
@@ -478,6 +538,59 @@ function ItemCard({ item, isOwner = false }: { item: SecondHandItem; isOwner?: b
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={bidOpen} onOpenChange={setBidOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Make an Offer</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmitBid} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="bidAmount">Your Offer (Rs.)</Label>
+              <Input
+                id="bidAmount"
+                type="number"
+                min="1"
+                max={item.price - 1}
+                placeholder={`Enter amount less than Rs. ${item.price.toLocaleString()}`}
+                value={bidAmount}
+                onChange={(e) => setBidAmount(e.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Listed price: Rs. {item.price.toLocaleString()}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bidMessage">Message (Optional)</Label>
+              <Textarea
+                id="bidMessage"
+                placeholder="Add a message to the seller..."
+                value={bidMessage}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setBidMessage(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setBidOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]"
+                disabled={isSubmittingBid}
+              >
+                {isSubmittingBid ? "Submitting..." : "Submit Offer"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Card className="overflow-hidden transition-all hover:shadow-lg hover:border-[oklch(0.50_0.15_145)]/50 group h-full flex flex-col">
         <Link href={`/marketplace/${item.id}`} className="flex-1 flex flex-col">
           <div className="relative aspect-square overflow-hidden bg-muted cursor-pointer" onClick={handleImageClick}>
@@ -527,17 +640,30 @@ function ItemCard({ item, isOwner = false }: { item: SecondHandItem; isOwner?: b
           Rs. {item.price.toLocaleString()}
         </span>
         {!isOwner && item.status === "available" ? (
-          <Button
-            size="sm"
-            variant={inCart ? "secondary" : "outline"}
-            onClick={(e) => {
-              e.preventDefault()
-              inCart ? removeFromCart(item.id) : addToCart(item)
-            }}
-          >
-            <ShoppingCart className="mr-1 h-3 w-3" />
-            {inCart ? "Remove" : "Add"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={inCart ? "secondary" : "outline"}
+              onClick={(e) => {
+                e.preventDefault()
+                inCart ? removeFromCart(item.id) : addToCart(item)
+              }}
+            >
+              <ShoppingCart className="mr-1 h-3 w-3" />
+              {inCart ? "Remove" : "Add"}
+            </Button>
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.preventDefault()
+                setBidOpen(true)
+              }}
+              className="bg-[oklch(0.50_0.15_145)] hover:bg-[oklch(0.45_0.15_145)]"
+            >
+              <DollarSign className="mr-1 h-3 w-3" />
+              Offer
+            </Button>
+          </div>
         ) : (
           <Link href={`/marketplace/${item.id}`}>
             <Button size="sm" variant="outline">
